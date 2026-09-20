@@ -94,11 +94,14 @@ public static class RefreshTokenEndpoints
         .WithName("RefreshToken").WithTags("Auth").AllowAnonymous();
 
         app.MapPost("/api/auth/logout",
-            async Task<Results<NoContent, NotFound>> (
-                RevokeTokenCommand command, IDispatcher dispatcher, CancellationToken ct) =>
+            async Task<NoContent> (
+                RevokeTokenCommand command, IDispatcher dispatcher, HttpContext context, CancellationToken ct) =>
             {
-                var result = await dispatcher.Send(command, ct);
-                return result.IsSuccess ? TypedResults.NoContent() : TypedResults.NotFound();
+                await dispatcher.Send(command, ct);
+                await AuthCookie.SignOutAsync(context);
+
+                // Always no-content: an unknown refresh token still means "I am signed out".
+                return TypedResults.NoContent();
             })
         .WithName("Logout").WithTags("Auth").AllowAnonymous();
     }

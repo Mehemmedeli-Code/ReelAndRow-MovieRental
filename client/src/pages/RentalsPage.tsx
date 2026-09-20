@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/components/useAuth";
 import { get, put, ApiError, query, type Paged } from "@/lib/api";
 import { formatDate, formatMoney } from "@/lib/format";
+import { t } from "@/lib/i18n";
 
 interface Rental {
   id: string;
@@ -43,7 +44,7 @@ export default function RentalsPage() {
     try {
       setData(await get<Paged<Rental>>("/api/rentals/mine" + query({ status: filter === "all" ? undefined : filter, pageSize: 20 })));
     } catch {
-      setMessage({ tone: "error", text: "Your rentals could not be loaded." });
+      setMessage({ tone: "error", text: t("error.rentals") });
     } finally {
       setLoading(false);
     }
@@ -69,7 +70,7 @@ export default function RentalsPage() {
       }
       await load();
     } catch (err) {
-      setMessage({ tone: "error", text: err instanceof ApiError ? err.message : "That action failed." });
+      setMessage({ tone: "error", text: err instanceof ApiError ? err.message : t("error.action") });
     } finally {
       setBusyId(null);
     }
@@ -77,31 +78,31 @@ export default function RentalsPage() {
 
   if (!isSignedIn) {
     return (
-      <Section title="My rentals" lede="Sign in to see what you have out.">
+      <Section title={t("rentals.title")} lede={t("rentals.ledeSignedOut")}>
         <Empty
-          title="Nothing to show yet"
-          hint="Your active, returned and overdue titles appear here once you are signed in."
-          action={<a href="/account"><Button>Sign in</Button></a>}
+          title={t("rentals.emptyTitle")}
+          hint={t("rentals.signedOutHint")}
+          action={<a href="/account"><Button>{t("nav.signIn")}</Button></a>}
         />
       </Section>
     );
   }
 
   return (
-    <Section title="My rentals" lede="Late fees accrue daily after a six-hour grace period, capped at ten days of rental.">
+    <Section title={t("rentals.title")} lede={t("rentals.lede")}>
       <div className="mb-5 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <Button key={f} size="sm" variant={filter === f ? "solid" : "outline"} onClick={() => setFilter(f)}>
-            {f === "all" ? "Everything" : f[0].toUpperCase() + f.slice(1)}
+            {t(`rentals.${f}`, t("common.everything"))}
           </Button>
         ))}
       </div>
 
       {message ? <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div> : null}
-      {loading ? <Spinner label="Opening your shelf" /> : null}
+      {loading ? <Spinner label={t("rentals.loading")} /> : null}
 
       {data && data.items.length === 0 ? (
-        <Empty title="No rentals in this view" hint="Rent something from the catalogue and it shows up here straight away." action={<a href="/"><Button variant="outline">Go to the catalogue</Button></a>} />
+        <Empty title={t("rentals.emptyTitle")} hint={t("rentals.emptyHint")} action={<a href="/"><Button variant="outline">{t("rentals.goCatalogue")}</Button></a>} />
       ) : null}
 
       <div className="space-y-3">

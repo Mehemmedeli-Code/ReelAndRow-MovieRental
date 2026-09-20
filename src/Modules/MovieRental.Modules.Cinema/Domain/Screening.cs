@@ -12,6 +12,11 @@ public sealed class Screening : BaseEntity, ISoftDeletable
     public int SeatsPerRow { get; set; } = 12;
     public decimal SeatPrice { get; set; } = 9.00m;
 
+    /// <summary>Two-letter code — az, en, ru or tr. A screening is a specific performance in
+    /// a specific language, so the language belongs here and not on the film.</summary>
+    public string AudioLanguage { get; set; } = "az";
+    public string? SubtitleLanguage { get; set; }
+
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAtUtc { get; set; }
 

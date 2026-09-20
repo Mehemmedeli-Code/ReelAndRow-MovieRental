@@ -13,5 +13,17 @@ public interface ICurrentUser
 public static class AppRoles
 {
     public const string Admin = "Admin";
+
+    /// <summary>Reviews uploaded films against the safety checklist. Cannot approve —
+    /// separating the person who inspects from the person who publishes is the point.</summary>
+    public const string Security = "Security";
+
     public const string Customer = "Customer";
+}
+
+public static class AppPolicies
+{
+    /// <summary>Security reviewers plus admins. Named separately from the roles so the
+    /// "admin can see everything" rule lives in one place instead of every endpoint.</summary>
+    public const string SecurityDesk = "SecurityDesk";
 }

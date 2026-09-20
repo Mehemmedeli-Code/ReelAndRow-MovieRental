@@ -3,16 +3,21 @@ import { createRoot } from "react-dom/client";
 import "@/styles/app.css";
 
 import { restoreSession } from "@/lib/api";
+import { ShaderBackground } from "@/components/ui/shader-background";
 import HomePage from "@/pages/HomePage";
 import CinemaPage from "@/pages/CinemaPage";
 import RentalsPage from "@/pages/RentalsPage";
 import StudioPage from "@/pages/StudioPage";
 import AdminPage from "@/pages/AdminPage";
 import AccountPage from "@/pages/AccountPage";
+import OnDisplayPage from "@/pages/OnDisplayPage";
+import AiCatalogPage from "@/pages/GalleryPage";
+import HumanCraftPage from "@/pages/HumanCraftPage";
+import SecurityPage from "@/pages/SecurityPage";
 
 /**
  * Island mounting. Razor owns routing and the page shell; each page declares which React
- * component belongs in its #root via data-page. One bundle, six entry points, no client
+ * component belongs in its #root via data-page. One bundle, ten entry points, no client
  * router fighting the server for the URL.
  */
 const ISLANDS: Record<string, () => JSX.Element> = {
@@ -22,9 +27,20 @@ const ISLANDS: Record<string, () => JSX.Element> = {
   studio: StudioPage,
   admin: AdminPage,
   account: AccountPage,
+  onDisplay: OnDisplayPage,
+  aiCatalog: AiCatalogPage,
+  humanCraft: HumanCraftPage,
+  security: SecurityPage,
 };
 
 async function bootstrap() {
+  // Rendered first and separately: the backdrop should appear immediately rather than
+  // waiting on the session refresh the page island needs.
+  const shader = document.getElementById("rr-shader");
+  if (shader) {
+    createRoot(shader).render(<ShaderBackground className="h-full w-full" />);
+  }
+
   const container = document.getElementById("root");
   if (!container) return;
 

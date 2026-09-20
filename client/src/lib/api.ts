@@ -14,6 +14,13 @@ export interface UserProfile {
   roles: string[];
 }
 
+/** Registration hands back a destination, not a session — the code has to be confirmed first. */
+export interface RegistrationResponse {
+  email: string;
+  verificationSent: boolean;
+  message: string;
+}
+
 export interface AuthResponse {
   accessToken: string;
   accessTokenExpiresAtUtc: string;
@@ -36,6 +43,7 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly fieldErrors?: Record<string, string[]>,
+    readonly code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -61,6 +69,9 @@ export const auth = {
   isAdmin() {
     return currentUser?.roles.includes("Admin") ?? false;
   },
+  isSecurity() {
+    return (currentUser?.roles.includes("Security") || currentUser?.roles.includes("Admin")) ?? false;
+  },
   subscribe(listener: (user: UserProfile | null) => void) {
     listeners.add(listener);
     return () => listeners.delete(listener);
@@ -82,16 +93,18 @@ export const auth = {
 async function parseError(response: Response): Promise<ApiError> {
   let message = `Request failed (${response.status}).`;
   let fieldErrors: Record<string, string[]> | undefined;
+  let code: string | undefined;
 
   try {
     const body = await response.json();
     message = body.title ?? body.message ?? message;
     fieldErrors = body.errors ?? undefined;
+    code = body.code ?? undefined;
   } catch {
     /* a non-JSON body is fine; the status carries enough meaning */
   }
 
-  return new ApiError(message, response.status, fieldErrors);
+  return new ApiError(message, response.status, fieldErrors, code);
 }
 
 async function send(path: string, init: RequestInit, retry: boolean): Promise<Response> {
@@ -99,7 +112,7 @@ async function send(path: string, init: RequestInit, retry: boolean): Promise<Re
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
 
-  const response = await fetch(path, { ...init, headers });
+  const response = await fetch(path, { ...init, headers, credentials: "include" });
 
   if (response.status === 401 && retry && (await tryRefresh())) {
     return send(path, init, false);
@@ -115,6 +128,7 @@ async function tryRefresh(): Promise<boolean> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refreshToken }),
+    credentials: "include",
   });
 
   if (!response.ok) {

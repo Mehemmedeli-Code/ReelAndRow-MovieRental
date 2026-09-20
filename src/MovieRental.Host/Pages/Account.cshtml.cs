@@ -1,11 +1,6 @@
 namespace MovieRental.Host.Pages;
 
-public sealed class AccountModel(IConfiguration configuration) : AppPageModel
+public sealed class AccountModel(IPageShellFactory shell) : AppPageModel
 {
-    public void OnGet() => View = new AppPageViewModel(
-        Title: "Sign in — Reel & Row",
-        Tagline: "Sign in or create an account to rent and book.",
-        ActiveNav: "account",
-        ReactMount: "account",
-        Assets: FrontendAssets.From(configuration));
+    public void OnGet() => View = shell.Create("account.signIn", "footer.note", "account", "account");
 }

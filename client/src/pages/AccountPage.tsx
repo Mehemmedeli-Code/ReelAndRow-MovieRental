@@ -2,158 +2,228 @@ import { useState } from "react";
 import { Section, Panel, Notice } from "@/components/Shell";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/components/useAuth";
-import { auth, post, ApiError, type AuthResponse } from "@/lib/api";
+import { auth, post, ApiError, type AuthResponse, type RegistrationResponse } from "@/lib/api";
+import { t } from "@/lib/i18n";
 
-type Mode = "login" | "register";
+type Mode = "signin" | "register" | "verify";
 
 export default function AccountPage() {
   const { user, isSignedIn, signOut } = useAuth();
-  const [mode, setMode] = useState<Mode>("login");
-  const [fullName, setFullName] = useState("");
+  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
-  const [sent, setSent] = useState<string | null>(null);
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "ok" | "error" | "info"; text: string } | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    setFieldErrors({});
+  function fail(err: unknown, fallback: string) {
+    if (err instanceof ApiError) {
+      setFieldErrors(err.fieldErrors ?? {});
+      setMessage({ tone: "error", text: err.message });
+      return err;
+    }
+    setMessage({ tone: "error", text: fallback });
+    return null;
+  }
 
+  async function signIn() {
+    setBusy(true); setMessage(null); setFieldErrors({});
     try {
-      const response =
-        mode === "login"
-          ? await post<AuthResponse>("/api/auth/login", { email, password })
-          : await post<AuthResponse>("/api/auth/register", { fullName, email, password, phoneNumber: phone || null });
-
-      auth.apply(response);
-      setPassword("");
+      auth.apply(await post<AuthResponse>("/api/auth/login", { email, password }));
+      // A full reload, not a client-side redirect: the session cookie has just been set and
+      // the Razor shell needs to re-render its nav with the new role.
+      window.location.href = "/";
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-        setFieldErrors(err.fieldErrors ?? {});
-      } else {
-        setError("That did not work. Check your connection and try again.");
+      const api = fail(err, "Could not sign in.");
+      if (api?.code === "email_unconfirmed") {
+        setMode("verify");
+        setMessage({ tone: "info", text: t("account.verifyLede") });
       }
     } finally {
       setBusy(false);
     }
   }
 
-  async function sendCode(channel: "Email" | "Sms") {
-    setSent(null);
+  async function register() {
+    setBusy(true); setMessage(null); setFieldErrors({});
     try {
-      await post("/api/auth/verification/send", { channel });
-      setSent(`Code sent by ${channel === "Sms" ? "SMS" : "e-mail"}. In development it is printed to the API console.`);
+      const result = await post<RegistrationResponse>("/api/auth/register",
+        { fullName, email, password, phoneNumber: phone || null });
+      setMode("verify");
+      setMessage({ tone: result.verificationSent ? "ok" : "error", text: result.message });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The code could not be sent.");
+      fail(err, "Could not create the account.");
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function confirmCode(channel: "Email" | "Sms") {
+  async function confirm() {
+    setBusy(true); setMessage(null);
     try {
-      await post("/api/auth/verification/confirm", { channel, code });
-      setSent("Verified.");
+      await post("/api/auth/verification/confirm", { email, channel: "Email", code });
+      setMode("signin");
       setCode("");
+      setMessage({ tone: "ok", text: "E-mail confirmed. You can sign in now." });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "That code was not accepted.");
+      fail(err, "That code was not accepted.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resend(channel: "Email" | "Sms") {
+    setBusy(true); setMessage(null);
+    try {
+      await post("/api/auth/verification/send", { email: email || user?.email, channel });
+      setMessage({ tone: "ok", text: t("account.verifyLede") });
+    } catch (err) {
+      fail(err, "The code could not be sent.");
+    } finally {
+      setBusy(false);
     }
   }
 
   if (isSignedIn && user) {
     return (
-      <Section title={`Signed in as ${user.fullName}`} lede="Verify your contact details to unlock rental reminders.">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Panel>
-            <dl className="space-y-3 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-ink-mute">E-mail</dt>
-                <dd className="text-ink">{user.email} {user.isEmailConfirmed ? "✓" : "— unverified"}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-ink-mute">Phone</dt>
-                <dd className="text-ink">{user.phoneNumber ?? "not set"} {user.isPhoneConfirmed ? "✓" : ""}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-ink-mute">Roles</dt>
-                <dd className="text-ink">{user.roles.join(", ")}</dd>
-              </div>
-            </dl>
-            <Button variant="outline" className="mt-5" onClick={signOut}>Sign out</Button>
-          </Panel>
+      <Section title={t("nav.account")}>
+        <Panel className="max-w-xl">
+          <p className="font-display text-2xl text-ink">{user.fullName}</p>
+          <p className="mt-1 text-sm text-ink-mute">{user.email}</p>
 
-          <Panel>
-            <h3 className="font-display text-lg text-ink">Verification</h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => sendCode("Email")}>Send e-mail code</Button>
-              <Button size="sm" variant="outline" onClick={() => sendCode("Sms")}>Send SMS code</Button>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {user.roles.map((role) => <Badge key={role}>{role}</Badge>)}
+            <Badge tone={user.isEmailConfirmed ? "good" : "warn"}>
+              {t("account.email")}: {user.isEmailConfirmed ? "✓" : "—"}
+            </Badge>
+            {user.phoneNumber ? (
+              <Badge tone={user.isPhoneConfirmed ? "good" : "warn"}>
+                {t("account.phone")}: {user.isPhoneConfirmed ? "✓" : "—"}
+              </Badge>
+            ) : null}
+          </div>
+
+          {message ? <div className="mt-4"><Notice tone={message.tone === "info" ? "info" : message.tone}>{message.text}</Notice></div> : null}
+
+          {user.phoneNumber && !user.isPhoneConfirmed ? (
+            <div className="mt-5 space-y-3">
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => resend("Sms")}>
+                {t("account.resend")} (SMS)
+              </Button>
+              <div className="flex gap-2">
+                <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder={t("account.code")} />
+                <Button
+                  size="sm"
+                  disabled={busy || !code}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await post("/api/auth/verification/confirm", { email: user.email, channel: "Sms", code });
+                      setMessage({ tone: "ok", text: "Phone confirmed." });
+                    } catch (err) { fail(err, "That code was not accepted."); }
+                    finally { setBusy(false); setCode(""); }
+                  }}
+                >
+                  {t("common.send")}
+                </Button>
+              </div>
             </div>
+          ) : null}
 
-            <div className="mt-4 flex gap-2">
-              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="6-digit code" inputMode="numeric" aria-label="Verification code" />
-              <Button size="sm" onClick={() => confirmCode("Email")} disabled={code.length < 4}>Confirm</Button>
-            </div>
-
-            {sent ? <div className="mt-3"><Notice tone="ok">{sent}</Notice></div> : null}
-            {error ? <div className="mt-3"><Notice tone="error">{error}</Notice></div> : null}
-          </Panel>
-        </div>
+          <Button
+            className="mt-6"
+            variant="outline"
+            onClick={async () => {
+              await post("/api/auth/logout", { refreshToken: localStorage.getItem("rr.refresh") }).catch(() => null);
+              signOut();
+              window.location.href = "/";
+            }}
+          >
+            Sign out
+          </Button>
+        </Panel>
       </Section>
     );
   }
 
   return (
-    <Section
-      title={mode === "login" ? "Sign in" : "Create an account"}
-      lede="The seeded accounts are admin@reelandrow.test / Admin1234 and customer@reelandrow.test / Customer1234."
-    >
+    <Section title={mode === "register" ? t("account.register") : mode === "verify" ? t("account.verify") : t("account.signIn")}
+             lede={mode === "verify" ? t("account.verifyLede") : undefined}>
       <Panel className="max-w-md">
-        <div className="mb-5 flex gap-2">
-          <Button size="sm" variant={mode === "login" ? "solid" : "ghost"} onClick={() => setMode("login")}>Sign in</Button>
-          <Button size="sm" variant={mode === "register" ? "solid" : "ghost"} onClick={() => setMode("register")}>Register</Button>
-        </div>
+        {message ? <div className="mb-4"><Notice tone={message.tone === "info" ? "info" : message.tone}>{message.text}</Notice></div> : null}
 
-        <div className="space-y-4">
-          {mode === "register" ? (
-            <Field label="Full name">
-              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
+        {mode === "verify" ? (
+          <div className="space-y-4">
+            <Field label={t("account.email")}>
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
             </Field>
-          ) : null}
-
-          <Field label="E-mail" hint={fieldErrors.Email?.[0]}>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          </Field>
-
-          {mode === "register" ? (
-            <Field label="Phone" hint="Optional — used for SMS codes and due-date alerts.">
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" placeholder="+994501234567" />
+            <Field label={t("account.code")}>
+              <Input
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="000000"
+              />
             </Field>
-          ) : null}
 
-          <Field
-            label="Password"
-            hint={fieldErrors.Password?.[0] ?? (mode === "register" ? "Eight characters, one capital, one digit." : undefined)}
-          >
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
-            />
-          </Field>
+            <Button className="w-full" disabled={busy || code.length !== 6} onClick={confirm}>
+              {busy ? t("common.loading") : t("account.verify")}
+            </Button>
 
-          {error ? <Notice tone="error">{error}</Notice> : null}
+            <div className="flex justify-between text-sm">
+              <button className="text-accent hover:underline" onClick={() => resend("Email")} disabled={busy}>
+                {t("account.resend")}
+              </button>
+              <button className="text-ink-mute hover:underline" onClick={() => setMode("signin")}>
+                {t("account.signIn")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {mode === "register" ? (
+              <Field label={t("account.fullName")} hint={fieldErrors.FullName?.[0]}>
+                <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+              </Field>
+            ) : null}
 
-          <Button className="w-full" disabled={busy || !email || !password} onClick={submit}>
-            {busy ? "Working…" : mode === "login" ? "Sign in" : "Create account"}
-          </Button>
-        </div>
+            <Field label={t("account.email")} hint={fieldErrors.Email?.[0]}>
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
+            </Field>
+
+            <Field label={t("account.password")} hint={fieldErrors.Password?.[0]}>
+              <Input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                autoComplete={mode === "register" ? "new-password" : "current-password"}
+              />
+            </Field>
+
+            {mode === "register" ? (
+              <Field label={t("account.phone")} hint={fieldErrors.PhoneNumber?.[0]}>
+                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+994..." />
+              </Field>
+            ) : null}
+
+            <Button className="w-full" disabled={busy} onClick={mode === "register" ? register : signIn}>
+              {busy ? t("common.loading") : mode === "register" ? t("account.register") : t("account.signIn")}
+            </Button>
+
+            <button
+              className="w-full text-sm text-ink-mute hover:underline"
+              onClick={() => { setMode(mode === "register" ? "signin" : "register"); setMessage(null); setFieldErrors({}); }}
+            >
+              {mode === "register" ? t("account.signIn") : t("account.register")}
+            </button>
+          </div>
+        )}
       </Panel>
     </Section>
   );

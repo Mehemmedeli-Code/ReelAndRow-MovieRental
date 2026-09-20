@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import StackSpread from "@/components/ui/stack-spread";
+import { MovieCarousel } from "@/components/ui/movie-carousel";
 import { MovieCard, type MovieListItem } from "@/components/MovieCard";
 import { Section, Notice, Empty, Spinner } from "@/components/Shell";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { useAuth } from "@/components/useAuth";
 import { get, post, query, ApiError, type Paged } from "@/lib/api";
+import { t } from "@/lib/i18n";
 
 const SORTS = [
-  { value: "newest", label: "Recently added" },
-  { value: "title", label: "Title A–Z" },
-  { value: "year", label: "Release year" },
-  { value: "rating", label: "Rating" },
-  { value: "price", label: "Daily price" },
+  { value: "newest", label: t("sort.newest") },
+  { value: "title", label: t("sort.title") },
+  { value: "year", label: t("sort.year") },
+  { value: "rating", label: t("sort.rating") },
+  { value: "price", label: t("sort.price") },
 ];
 
 export default function HomePage() {
@@ -28,10 +30,19 @@ export default function HomePage() {
   const [onlyAvailable, setOnlyAvailable] = useState(false);
 
   const [data, setData] = useState<Paged<MovieListItem> | null>(null);
+  // Fetched once and independent of the filters below: the front shelf should not
+  // empty out the moment someone types in the search box.
+  const [featured, setFeatured] = useState<MovieListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [rentingId, setRentingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    get<Paged<MovieListItem>>("/api/movies" + query({ sortBy: "rating", sortDir: "desc", pageSize: 8 }))
+      .then((page) => setFeatured(page.items))
+      .catch(() => setFeatured([]));
+  }, []);
 
   // Debounce keeps the catalogue responsive without a request per keystroke.
   useEffect(() => {
@@ -59,7 +70,7 @@ export default function HomePage() {
     try {
       setData(await get<Paged<MovieListItem>>(url));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The catalogue could not be loaded.");
+      setError(err instanceof ApiError ? err.message : t("error.catalogue"));
     } finally {
       setLoading(false);
     }
@@ -82,7 +93,7 @@ export default function HomePage() {
       setMessage(`${movie.title} is yours for seven days.`);
       await load();
     } catch (err) {
-      setMessage(err instanceof ApiError ? err.message : "The rental could not be completed.");
+      setMessage(err instanceof ApiError ? err.message : t("error.rental"));
     } finally {
       setRentingId(null);
     }
@@ -91,19 +102,25 @@ export default function HomePage() {
   return (
     <>
       <StackSpread
-        headline="Eight shelves."
-        headlineMuted=" One "
-        headlineTail="counter."
-        subtitle="Rent a film, book a seat for tonight, or put your own short in front of a reviewer."
+        headline={t("home.hero.a")}
+        headlineMuted={t("home.hero.b")}
+        headlineTail={t("home.hero.c")}
+        subtitle={t("home.hero.subtitle")}
       >
         <a href="#catalogue" className="inline-flex h-11 items-center rounded-full bg-accent px-6 text-sm font-semibold text-surface">
           Browse the catalogue
         </a>
       </StackSpread>
 
+      {featured.length > 0 ? (
+        <Section title={t("featured.title")} lede={t("featured.lede")}>
+          <MovieCarousel movies={featured} onRent={rent} busyId={rentingId} />
+        </Section>
+      ) : null}
+
       <Section
-        title="The catalogue"
-        lede="Search by title, director or plot. Filters and sorting run server-side, so the page you land on is the page you can link to."
+        title={t("home.title")}
+        lede={t("home.lede")}
         className="scroll-mt-20"
       >
         <div id="catalogue" className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -111,21 +128,21 @@ export default function HomePage() {
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-mute" aria-hidden />
             <Input
               className="pl-9"
-              placeholder="Search titles, directors, plots"
+              placeholder={t("home.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search the catalogue"
+              aria-label={t("common.search")}
             />
           </div>
 
-          <Select value={genre} onChange={(e) => { setGenre(e.target.value); setPage(1); }} aria-label="Genre">
-            <option value="all">Every genre</option>
+          <Select value={genre} onChange={(e) => { setGenre(e.target.value); setPage(1); }} aria-label={t("home.genre")}>
+            <option value="all">{t("home.everyGenre")}</option>
             {genres.map((g) => (
               <option key={g} value={g}>{g}</option>
             ))}
           </Select>
 
-          <Select value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(1); }} aria-label="Sort by">
+          <Select value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(1); }} aria-label={t("home.sortBy")}>
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
@@ -137,7 +154,7 @@ export default function HomePage() {
               className="flex-1"
               onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
             >
-              {sortDir === "desc" ? "Descending" : "Ascending"}
+              {sortDir === "desc" ? t("common.descending") : t("common.ascending")}
             </Button>
             <Button
               variant={onlyAvailable ? "solid" : "outline"}
@@ -145,7 +162,7 @@ export default function HomePage() {
               aria-pressed={onlyAvailable}
               onClick={() => { setOnlyAvailable((v) => !v); setPage(1); }}
             >
-              In stock
+              {t("home.inStock")}
             </Button>
           </div>
         </div>
@@ -153,13 +170,13 @@ export default function HomePage() {
         {message ? <div className="mb-4"><Notice tone="info">{message}</Notice></div> : null}
         {error ? <Notice tone="error">{error}</Notice> : null}
 
-        {loading && !data ? <Spinner label="Fetching the shelves" /> : null}
+        {loading && !data ? <Spinner label={t("home.loading")} /> : null}
 
         {data && data.items.length === 0 ? (
           <Empty
-            title="Nothing matches those filters"
-            hint="Widen the genre, clear the search box, or turn off the in-stock filter."
-            action={<Button variant="outline" onClick={() => { setSearch(""); setGenre("all"); setOnlyAvailable(false); }}>Clear filters</Button>}
+            title={t("home.emptyTitle")}
+            hint={t("home.emptyHint")}
+            action={<Button variant="outline" onClick={() => { setSearch(""); setGenre("all"); setOnlyAvailable(false); }}>{t("common.clearFilters")}</Button>}
           />
         ) : null}
 
@@ -171,7 +188,7 @@ export default function HomePage() {
               ))}
             </div>
 
-            <nav className="mt-8 flex items-center justify-between gap-4" aria-label="Catalogue pages">
+            <nav className="mt-8 flex items-center justify-between gap-4" aria-label={t("common.pages")}>
               <Button variant="outline" size="sm" disabled={!data.hasPrevious} onClick={() => setPage((p) => p - 1)}>
                 Previous
               </Button>

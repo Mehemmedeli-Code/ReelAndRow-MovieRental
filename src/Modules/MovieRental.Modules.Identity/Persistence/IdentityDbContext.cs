@@ -44,8 +44,10 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
         {
             e.ToTable("VerificationCodes");
             e.HasKey(x => x.Id);
-            e.Property(x => x.Code).HasMaxLength(128).IsRequired();
-            e.HasIndex(x => new { x.UserId, x.Channel });
+            e.Property(x => x.CodeHash).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Salt).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Channel).HasConversion<int>();
+            e.HasIndex(x => new { x.UserId, x.Channel, x.SentAtUtc });
         });
 
         base.OnModelCreating(b);

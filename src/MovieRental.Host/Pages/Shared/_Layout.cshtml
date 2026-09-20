@@ -1,13 +1,15 @@
+@inject MovieRental.Host.Infrastructure.Localization.ILanguageContext T
 @{
     // The layout reads the page's own strongly-typed model — no ViewData round trip.
     var view = ((AppPageModel)Model).View;
+    var returnUrl = Context.Request.Path + Context.Request.QueryString;
 }
 <!DOCTYPE html>
-<html lang="en" class="rr">
+<html lang="@view.Language" class="rr">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@view.Title</title>
+    <title>@view.Title · WatchingYou</title>
     <meta name="description" content="@view.Tagline" />
     <meta name="color-scheme" content="dark" />
 
@@ -21,11 +23,18 @@
     }
     <link rel="stylesheet" href="~/css/shell.css" asp-append-version="true" />
 </head>
-<body class="rr-body">
-    <a class="rr-skip" href="#main">Skip to content</a>
+<body class="rr-body @(view.UseShaderBackground ? "has-shader" : null)">
+    @* Its own React root, mounted from main.tsx. Keeping it outside #root means the field
+       survives whichever island the page happens to render, and costs one canvas total. *@
+    @if (view.UseShaderBackground)
+    {
+        <div id="rr-shader" class="rr-shader" aria-hidden="true"></div>
+    }
+
+    <a class="rr-skip" href="#main">@T["nav.skip"]</a>
 
     <header class="rr-header">
-        <a class="rr-wordmark" href="/" aria-label="Reel and Row home">
+        <a class="rr-wordmark" href="/" aria-label="WatchingYou home">
             <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="12" r="10.2" fill="none" stroke="currentColor" stroke-width="1.3" />
                 <circle cx="12" cy="12" r="2.6" fill="currentColor" />
@@ -34,18 +43,29 @@
                 <circle cx="5.6" cy="12" r="2" fill="currentColor" opacity=".75" />
                 <circle cx="18.4" cy="12" r="2" fill="currentColor" opacity=".75" />
             </svg>
-            <span>Reel &amp; Row</span>
+            <span>WatchingYou</span>
         </a>
 
-        <nav class="rr-nav" aria-label="Main">
-            <a href="/" class="@(view.ActiveNav == "home" ? "is-current" : null)">Catalogue</a>
-            <a href="/cinema" class="@(view.ActiveNav == "cinema" ? "is-current" : null)">Cinema seats</a>
-            <a href="/rentals" class="@(view.ActiveNav == "rentals" ? "is-current" : null)">My rentals</a>
-            <a href="/studio" class="@(view.ActiveNav == "studio" ? "is-current" : null)">Studio</a>
-            <a href="/admin" class="@(view.ActiveNav == "admin" ? "is-current" : null)">Admin</a>
+        @* Items the signed-in user may not see were never added to the model, so there is
+           nothing here to hide, grey out or forget to guard. *@
+        <nav class="rr-nav" aria-label="@(T["nav.catalogue"])">
+            @foreach (var item in view.Nav)
+            {
+                <a href="@item.Href" class="@(item.IsCurrent ? "is-current" : null)">@item.Label</a>
+            }
         </nav>
 
-        <a class="rr-account" href="/account">Sign in</a>
+        <div class="rr-tools">
+            <div class="rr-lang">
+                @foreach (var option in view.Languages)
+                {
+                    <a href="/lang/@option.Code?returnUrl=@(Uri.EscapeDataString(returnUrl))"
+                       class="@(option.IsCurrent ? "is-current" : null)"
+                       hreflang="@option.Code" title="@option.Name">@option.Code.ToUpperInvariant()</a>
+                }
+            </div>
+            <a class="rr-account" href="/account">@(view.IsSignedIn ? T["nav.account"] : T["nav.signIn"])</a>
+        </div>
     </header>
 
     <main id="main">
@@ -53,11 +73,19 @@
     </main>
 
     <footer class="rr-footer">
-        <p>Reel &amp; Row — a teaching build. Data resets whenever you drop the database.</p>
-        <a href="/swagger">API reference</a>
+        <p>@T["footer.note"]</p>
     </footer>
 
-    @* The React island. Everything dynamic lives inside this root; Razor stays the shell. *@
+    @* Translations travel with the document so React renders in the right language on the
+       first paint rather than flashing keys while a fetch completes. *@
+    <script id="rr-i18n" type="application/json">@Html.Raw(view.TranslationsJson)</script>
+    <script>
+        window.__RR__ = {
+            lang: "@view.Language",
+            t: JSON.parse(document.getElementById("rr-i18n").textContent || "{}")
+        };
+    </script>
+
     @if (view.Assets.ViteClientUrl is { } viteClient)
     {
         <script type="module" src="@viteClient"></script>

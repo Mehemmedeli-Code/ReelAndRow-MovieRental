@@ -1,6 +1,6 @@
 // Adapted from the Hyperiux Vault "stack spread" pattern.
 // Changes for this project: the card faces render inline SVG posters instead of remote
-// photographs, the palette follows the Reel & Row tokens, and the copy is passed in as
+// photographs, the palette follows the project's tokens, and the copy is passed in as
 // props so the same stage can headline different pages.
 
 "use client";

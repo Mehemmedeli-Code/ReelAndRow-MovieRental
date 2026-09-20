@@ -44,9 +44,11 @@ html.rr { background: var(--surface); }
 .rr-skip:focus { left: 0; }
 
 .rr-header {
+  /* Stays at the top through any scroll, on every page. `sticky` rather than `fixed` so it
+     still occupies layout space and never covers the first line of content. */
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: 60;
   display: flex;
   align-items: center;
   gap: 2rem;
@@ -98,8 +100,68 @@ html.rr { background: var(--surface); }
 }
 .rr-account:hover { background: var(--accent-bright); }
 
+/* Language picker sits beside the account button, not in the nav — it is a setting for the
+   page you are already on, not another place to go. */
+.rr-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.rr-lang {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.rr-lang a {
+  color: var(--ink-mute);
+  text-decoration: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.28rem 0.5rem;
+  border-radius: 999px;
+  transition: color 160ms ease, background 160ms ease;
+}
+.rr-lang a:hover { color: var(--ink); }
+.rr-lang a.is-current { color: var(--surface); background: var(--accent); }
+
 #main { flex: 1; }
 .rr-stage { min-height: 60vh; }
+
+/* The canvas sits behind everything and takes no input. The body keeps its solid colour
+   as the fallback, so a machine without WebGL simply sees the flat theme. */
+.rr-shader {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* A scrim over the field. Text contrast is the constraint here: without this the pale
+   green crests come close enough to the body colour to make small type swim. */
+.rr-shader::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 80% at 50% 0%, transparent 0%, var(--surface) 78%),
+    linear-gradient(to bottom, color-mix(in srgb, var(--surface) 35%, transparent), var(--surface));
+}
+
+/* Content above the field. Without a stacking context the canvas would paint over it. */
+.rr-body.has-shader { background: transparent; }
+
+/* Only these two need lifting above the canvas. The header is left alone on purpose:
+   it is already `position: sticky`, and overriding that with `relative` is exactly what
+   made it scroll away. */
+.rr-body.has-shader > main,
+.rr-body.has-shader > .rr-footer { position: relative; z-index: 1; }
 
 .rr-footer {
   display: flex;
@@ -125,4 +187,6 @@ html.rr { background: var(--surface); }
 @media (max-width: 720px) {
   .rr-header { gap: 1rem; }
   .rr-nav { gap: 0.9rem; order: 3; width: 100%; }
+  .rr-tools { gap: 0.6rem; }
+  .rr-lang a { padding: 0.24rem 0.38rem; font-size: 0.68rem; }
 }

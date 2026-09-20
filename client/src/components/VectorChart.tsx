@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { t } from "@/lib/i18n";
 
 export interface ChartPoint {
   label: string;
@@ -24,7 +25,7 @@ export function VectorBarChart({ series }: { series: ChartSeries }) {
         <h3 className="font-display text-lg text-ink">{series.title}</h3>
         <p className="mt-1 text-sm text-ink-mute">{series.caption}</p>
         <p className="mt-8 mb-6 text-center text-sm text-ink-mute">
-          Nothing to show yet — this fills in as customers rent and review.
+          {t("chart.empty")}
         </p>
       </div>
     );

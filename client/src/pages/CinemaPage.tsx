@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/useAuth";
 import { get, post, ApiError } from "@/lib/api";
 import { formatDateTime, formatMoney } from "@/lib/format";
+import { t } from "@/lib/i18n";
 
 interface Screening {
   id: string;
@@ -52,7 +53,7 @@ export default function CinemaPage() {
         setScreenings(list);
         setActiveId(list[0]?.id ?? null);
       })
-      .catch(() => setMessage({ tone: "error", text: "Screenings could not be loaded." }))
+      .catch(() => setMessage({ tone: "error", text: t("error.screenings") }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -61,7 +62,7 @@ export default function CinemaPage() {
     try {
       setMap(await get<SeatMap>(`/api/screenings/${screeningId}/seats`));
     } catch {
-      setMessage({ tone: "error", text: "That seat map is unavailable right now." });
+      setMessage({ tone: "error", text: t("error.seatMap") });
     }
   }, []);
 
@@ -98,7 +99,7 @@ export default function CinemaPage() {
       setMessage({ tone: "ok", text: `Booked ${seats.length} seat${seats.length === 1 ? "" : "s"}. See you there.` });
       await loadMap(map.screeningId);
     } catch (err) {
-      setMessage({ tone: "error", text: err instanceof ApiError ? err.message : "The booking did not go through." });
+      setMessage({ tone: "error", text: err instanceof ApiError ? err.message : t("error.booking") });
       await loadMap(map.screeningId);
     } finally {
       setBooking(false);
@@ -108,11 +109,11 @@ export default function CinemaPage() {
   const total = map ? map.seatPrice * picked.size : 0;
 
   return (
-    <Section title="Tonight in the halls" lede="Free seats are outlined, taken seats are filled. Picking is instant; the seat is only yours once you confirm.">
-      {loading ? <Spinner label="Checking the listings" /> : null}
+    <Section title={t("cinema.title")} lede={t("cinema.lede")}>
+      {loading ? <Spinner label={t("cinema.loading")} /> : null}
 
       {!loading && screenings.length === 0 ? (
-        <Empty title="No screenings scheduled" hint="An admin can add screenings once the catalogue has titles in it." />
+        <Empty title={t("cinema.emptyTitle")} hint={t("cinema.emptyHint")} />
       ) : null}
 
       {screenings.length > 0 ? (
@@ -143,7 +144,7 @@ export default function CinemaPage() {
 
           <Panel>
             {!map ? (
-              <Spinner label="Drawing the hall" />
+              <Spinner label={t("cinema.drawing")} />
             ) : (
               <>
                 <div className="mb-6">
@@ -199,9 +200,9 @@ export default function CinemaPage() {
                 </div>
 
                 <div className="mt-6 flex flex-wrap items-center gap-4 text-xs text-ink-mute">
-                  <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm border border-accent-dim/60" />Free</span>
-                  <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-accent" />Selected</span>
-                  <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-line" />Taken</span>
+                  <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm border border-accent-dim/60" />{t("cinema.free")}</span>
+                  <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-accent" />{t("cinema.selected")}</span>
+                  <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-line" />{t("cinema.taken")}</span>
                   <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-accent-dim" />Yours</span>
                 </div>
 
@@ -210,11 +211,11 @@ export default function CinemaPage() {
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-4">
                   <p className="text-sm text-ink-mute">
                     {picked.size === 0
-                      ? "No seats picked yet"
+                      ? t("cinema.noSeats")
                       : `${picked.size} seat${picked.size === 1 ? "" : "s"} · ${formatMoney(total)}`}
                   </p>
                   <Button disabled={picked.size === 0 || booking} onClick={book}>
-                    {booking ? "Booking…" : isSignedIn ? "Confirm seats" : "Sign in to book"}
+                    {booking ? t("cinema.booking") : isSignedIn ? t("cinema.confirm") : t("cinema.signInToBook")}
                   </Button>
                 </div>
               </>

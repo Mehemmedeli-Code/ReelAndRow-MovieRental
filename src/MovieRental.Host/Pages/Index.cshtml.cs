@@ -1,11 +1,6 @@
 namespace MovieRental.Host.Pages;
 
-public sealed class IndexModel(IConfiguration configuration) : AppPageModel
+public sealed class IndexModel(IPageShellFactory shell) : AppPageModel
 {
-    public void OnGet() => View = new AppPageViewModel(
-        Title: "Reel & Row — rent films, book seats",
-        Tagline: "A rental catalogue, a cinema seat map and a shorts festival in one place.",
-        ActiveNav: "home",
-        ReactMount: "home",
-        Assets: FrontendAssets.From(configuration));
+    public void OnGet() => View = shell.Create("nav.catalogue", "footer.note", "home", "home");
 }

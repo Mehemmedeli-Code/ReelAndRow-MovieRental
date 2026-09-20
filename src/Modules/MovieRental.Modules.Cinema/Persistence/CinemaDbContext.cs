@@ -21,7 +21,11 @@ public sealed class CinemaDbContext(DbContextOptions<CinemaDbContext> options) :
             e.Property(x => x.MovieTitle).HasMaxLength(250).IsRequired();
             e.Property(x => x.Hall).HasMaxLength(60).IsRequired();
             e.Property(x => x.SeatPrice).HasPrecision(10, 2);
+            e.Property(x => x.AudioLanguage).HasMaxLength(8).IsRequired();
+            e.Property(x => x.SubtitleLanguage).HasMaxLength(8);
             e.HasIndex(x => x.StartsAtUtc);
+            // What the Movies on Display filters sort and narrow by.
+            e.HasIndex(x => new { x.StartsAtUtc, x.AudioLanguage });
             e.HasMany(x => x.Bookings).WithOne(x => x.Screening!).HasForeignKey(x => x.ScreeningId).OnDelete(DeleteBehavior.Cascade);
         });
 

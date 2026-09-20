@@ -3,6 +3,7 @@ import { Clapperboard, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatMoney, formatRuntime } from "@/lib/format";
+import { t } from "@/lib/i18n";
 
 export interface MovieListItem {
   id: string;
@@ -78,13 +79,13 @@ export function MovieCard({
           <div>
             <p className="text-sm text-ink">{formatMoney(movie.dailyPrice)}<span className="text-ink-mute"> / day</span></p>
             <Badge tone={available ? "good" : "bad"} className="mt-1.5">
-              {available ? `${movie.availableCopies} on the shelf` : "All copies out"}
+              {available ? `${movie.availableCopies} ${t("movie.onShelf")}` : t("movie.allOut")}
             </Badge>
           </div>
 
           {onRent ? (
             <Button size="sm" disabled={!available || busy} onClick={() => onRent(movie)}>
-              {busy ? "Renting…" : "Rent"}
+              {busy ? t("movie.renting") : t("movie.rent")}
             </Button>
           ) : null}
         </div>

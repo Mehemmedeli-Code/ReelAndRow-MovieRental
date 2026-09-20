@@ -1,4 +1,4 @@
-# Reel & Row — modular monolith movie rental
+# WatchingYou — modular monolith movie rental
 
 One solution, two front ends: ASP.NET Core (.NET 10) serving Minimal APIs and Razor Pages, with React + Tailwind islands mounted inside the Razor shell. It opens in Visual Studio 2026 and in VS Code without changing anything.
 
@@ -52,9 +52,15 @@ The first run creates the database, the schemas and two accounts:
 | Role | E-mail | Password |
 |---|---|---|
 | Admin | `admin@reelandrow.test` | `Admin1234` |
+| Security | `security@reelandrow.test` | `Security1234` |
 | Customer | `customer@reelandrow.test` | `Customer1234` |
 
-Verification codes and e-mails are printed to the API console in development — nothing is actually sent.
+Verification codes and e-mails are printed to the API console until you configure a real
+transport — see **Verification and delivery** below.
+
+The development bootstrapper carries a schema stamp. When an entity changes shape the stamp
+moves, and the next start drops and rebuilds `MovieRentalDB` rather than leaving a schema that
+is present but out of date. That is development-only; production uses real migrations.
 
 ### Working on the React side
 
@@ -145,24 +151,98 @@ Repeat per context: `IdentityDbContext`, `CatalogDbContext`, `RentalsDbContext`,
 
 ---
 
-## The twelve features and where they live
+## Features and where they live
 
-| # | Feature | Code |
-|---|---|---|
-| 1 | Registration, login, e-mail/SMS verification | `Modules.Identity/Features/{Register,Login,RefreshToken,Verification}.cs` |
-| 2 | Catalogue browsing, search, filters | `Modules.Catalog/Features/GetMovies.cs` |
-| 3 | Rent, extend, return | `Modules.Rentals/Features/{RentMovie,ReturnAndExtend}.cs` |
-| 4 | Late fee calculation | `Modules.Rentals/Domain/LateFeePolicy.cs` |
-| 5 | Admin inventory, soft delete, restore, stock | `Modules.Catalog/Features/ManageMovies.cs` |
-| 6 | Personal rental history | `Modules.Rentals/Features/GetMyRentals.cs` |
-| 7 | Star ratings and reviews | `Modules.Catalog/Features/AddReview.cs` |
-| 8 | Due-date notifications | `Modules.Rentals/Infrastructure/DueDateNotificationService.cs` |
-| 9 | Cinema seat map and booking | `Modules.Cinema/Features/{SeatMap,BookSeats}.cs` |
-| 10 | Server-side paging and sorting | `GetMovies.cs` + `SharedKernel/Results/PagedResult.cs` |
-| 11 | Link out to an AI video tool | `client/src/pages/StudioPage.tsx`, URL in `appsettings.json` |
-| 12 | Short-film upload with 3-day manual review | `Modules.Media/Features/{UploadShortFilm,ReviewShortFilm}.cs` |
+| Feature | Code |
+|---|---|
+| Registration, e-mail/SMS verification | `Modules.Identity/Features/{Register,Login,Verification}.cs`, `Infrastructure/VerificationService.cs` |
+| Catalogue browsing, search, filters | `Modules.Catalog/Features/GetMovies.cs` |
+| Rent, extend, return, late fees | `Modules.Rentals/Features/`, `Domain/LateFeePolicy.cs` |
+| Admin inventory, soft delete, restore | `Modules.Catalog/Features/ManageMovies.cs` |
+| Ratings and reviews | `Modules.Catalog/Features/AddReview.cs` |
+| Due-date notifications | `Modules.Rentals/Infrastructure/DueDateNotificationService.cs` |
+| Cinema seat map and booking | `Modules.Cinema/Features/{SeatMap,BookSeats}.cs` |
+| Movies on Display + screening admin | `Modules.Cinema/Features/{MoviesOnDisplay,ManageScreenings}.cs` |
+| Short-film upload | `Modules.Media/Features/UploadShortFilm.cs` |
+| Studio workspace, visibility, threads | `Modules.Media/Features/StudioWorkspace.cs` |
+| Authorised video streaming | `Modules.Media/Features/StreamShortFilm.cs` |
+| AI Catalog and Human Craft galleries | `Modules.Media/Features/Galleries.cs` |
+| Security review pipeline | `Modules.Media/Features/SecurityReview.cs`, `Domain/SecurityReport.cs` |
+| Admin decision and verdict e-mail | `Modules.Media/Features/ReviewShortFilm.cs` |
+| Four-language interface | `Host/Infrastructure/Localization/`, `Host/locales/*.json` |
+| Dashboard analytics | `Modules.{Catalog,Rentals}/Infrastructure/*Analytics.cs` |
 
-JSON seeding: `POST /api/admin/movies/seed` accepts a bare array or `{ "movies": [...] }`. A sample payload is in `data/movies.json`.
+## Roles
+
+| Role | Can do |
+|---|---|
+| Customer | Rent, review, book seats, upload shorts, run their own Studio |
+| Security | Everything a customer can, plus inspect submissions and file reports |
+| Admin | Everything, plus inventory, screenings, final approval and the API reference |
+
+Nav items a role may not use are never rendered, and every route is independently
+protected server-side — hiding a link is presentation, not security.
+
+## Review pipeline
+
+```
+Pending ──claim──> UnderSecurityReview ──report──> SecurityCleared ──admin──> Approved
+                                              \                         \
+                                               ─> SecurityFlagged  ────────> Rejected
+```
+
+Security inspects against a stored eight-point checklist and cannot publish. Admin publishes
+and cannot act without a filed report. Approving a flagged film requires a written reason,
+which travels to the uploader in the decision e-mail. The three-day deadline covers the whole
+pipeline, not each stage.
+
+A film reaches a public gallery only when it is **Approved** *and* its author has set it to
+**Public**. Which gallery is decided by the origin declared at upload — AI Catalog or Human
+Craft. Video is served through an authorising endpoint, never as a static file, so a private
+film cannot be reached by guessing its URL.
+
+## Verification and delivery
+
+Codes are six digits, hashed with a per-code salt, valid ten minutes, single use, five
+attempts, one resend per minute. An account cannot sign in until its e-mail is confirmed.
+
+`Notifications:Email:Provider` and `Notifications:Sms:Provider` choose the transport:
+
+- `Console` writes the code to the log — the default, so a fresh clone runs with no credentials.
+- `Smtp` sends for real. Set host, port, from-address in `appsettings.json`; put the username
+  and password in user secrets.
+- `Twilio` sends SMS. Account SID and auth token likewise belong in user secrets.
+
+```bash
+dotnet user-secrets set "Notifications:Email:UserName" "you@gmail.com" --project src/MovieRental.Host
+dotnet user-secrets set "Notifications:Email:Password" "your-app-password" --project src/MovieRental.Host
+```
+
+Gmail needs an App Password, not your account password, and two-factor must be on.
+An unrecognised provider name throws at startup rather than falling back to the console —
+a silent fallback in production means codes nobody ever receives.
+
+## Languages
+
+Azerbaijani (default), English, Russian, Turkish. One JSON file per locale in
+`src/MovieRental.Host/locales/`, read once at startup and used by **both** Razor and React —
+Razor through `ILanguageContext`, React through the same dictionary inlined into the document
+so the first paint is already translated.
+
+The brief asked for `.resx` on the Razor side and a separate bundle for React. Two stores of
+the same sentences drift: a key gets translated on one side and not the other, and nobody
+notices until a page renders half in English. One file feeding both costs a small loader and
+removes that whole class of bug.
+
+202 keys, identical across all four files. Every visitor-facing string in the shell and in
+every React page comes from a key — nothing is hardcoded.
+
+To add one: put the key in all four files, then use `@T["your.key"]` in Razor or
+`t("your.key")` in React. Missing keys render as the key itself, which is a visible bug
+report rather than a blank button.
+
+Dates and numbers go through `Intl` with the active language, so 12 September reads
+"12 sen" in Azerbaijani and "12 сент." in Russian without a second format table.
 
 ---
 

@@ -1,11 +1,6 @@
 namespace MovieRental.Host.Pages;
 
-public sealed class AdminModel(IConfiguration configuration) : AppPageModel
+public sealed class AdminModel(IPageShellFactory shell) : AppPageModel
 {
-    public void OnGet() => View = new AppPageViewModel(
-        Title: "Admin — Reel & Row",
-        Tagline: "Inventory, overdue rentals, submissions and benchmark charts.",
-        ActiveNav: "admin",
-        ReactMount: "admin",
-        Assets: FrontendAssets.From(configuration));
+    public void OnGet() => View = shell.Create("nav.admin", "footer.note", "admin", "admin");
 }

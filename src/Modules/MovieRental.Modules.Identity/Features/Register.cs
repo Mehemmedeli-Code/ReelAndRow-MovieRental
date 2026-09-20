@@ -4,10 +4,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using MovieRental.Modules.Identity.Domain;
 using MovieRental.Modules.Identity.Infrastructure;
 using MovieRental.Modules.Identity.Persistence;
-using MovieRental.SharedKernel.Contracts;
 using MovieRental.SharedKernel.Cqrs;
 using MovieRental.SharedKernel.Results;
 using MovieRental.SharedKernel.Security;
@@ -16,7 +16,7 @@ namespace MovieRental.Modules.Identity.Features;
 
 // Feature 1 — registration. One file holds the whole slice: contract, rules, handler, route.
 public sealed record RegisterCommand(string FullName, string Email, string Password, string? PhoneNumber)
-    : ICommand<Result<AuthResponse>>;
+    : ICommand<Result<RegistrationResponse>>;
 
 internal sealed class RegisterValidator : AbstractValidator<RegisterCommand>
 {
@@ -36,17 +36,16 @@ internal sealed class RegisterValidator : AbstractValidator<RegisterCommand>
 internal sealed class RegisterHandler(
     IdentityDbContext db,
     IPasswordHasher hasher,
-    ITokenService tokens,
-    IEmailSender email,
-    IHttpContextAccessor http)
-    : ICommandHandler<RegisterCommand, Result<AuthResponse>>
+    IVerificationService verification,
+    ILogger<RegisterHandler> logger)
+    : ICommandHandler<RegisterCommand, Result<RegistrationResponse>>
 {
-    public async Task<Result<AuthResponse>> Handle(RegisterCommand command, CancellationToken ct)
+    public async Task<Result<RegistrationResponse>> Handle(RegisterCommand command, CancellationToken ct)
     {
         var normalizedEmail = command.Email.Trim().ToLowerInvariant();
 
         if (await db.Users.AnyAsync(u => u.Email == normalizedEmail, ct))
-            return Result.Failure<AuthResponse>(Error.Conflict("That e-mail is already registered."));
+            return Result.Failure<RegistrationResponse>(Error.Conflict("That e-mail is already registered."));
 
         var user = new AppUser
         {
@@ -57,27 +56,25 @@ internal sealed class RegisterHandler(
             Roles = AppRoles.Customer
         };
 
-        var refresh = tokens.CreateRefreshToken(user.Id, http.HttpContext?.Connection.RemoteIpAddress?.ToString());
-        user.RefreshTokens.Add(refresh);
-
         db.Users.Add(user);
         await db.SaveChangesAsync(ct);
 
-        var link = tokens.CreateConfirmationLinkPayload(user.Id, "email-confirm");
+        // The account is created either way. If the mail transport is down the user can ask
+        // for another code from the confirm screen rather than registering all over again.
+        try
+        {
+            var issued = await verification.IssueAsync(user, VerificationChannel.Email, ct);
+            if (issued.IsFailure) throw new InvalidOperationException(issued.Error.Message);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Could not send the verification code to {Email}", user.Email);
+            return Result.Success(new RegistrationResponse(user.Email, false,
+                "Your account was created, but the code could not be sent. Try requesting it again."));
+        }
 
-        var body = $"""
-            <p>Hi {user.FullName},</p>
-            <p>Confirm your e-mail to start renting:</p>
-            <p><a href="/api/auth/confirm-email?payload={link}">Confirm e-mail</a></p>
-            """;
-
-        await email.SendAsync(new EmailRequest(
-            user.Email,
-            "Confirm your Reel & Row account",
-            body), ct);
-
-        var access = tokens.CreateAccessToken(user);
-        return Result.Success(new AuthResponse(access.Value, access.ExpiresAtUtc, refresh.Token, user.ToProfile()));
+        return Result.Success(new RegistrationResponse(user.Email, true,
+            "We sent a six-digit code to your e-mail. Enter it to finish signing up."));
     }
 }
 
@@ -85,7 +82,7 @@ public static class RegisterEndpoint
 {
     public static void Map(IEndpointRouteBuilder app) =>
         app.MapPost("/api/auth/register",
-            async Task<Results<Ok<AuthResponse>, Conflict<Error>>> (
+            async Task<Results<Ok<RegistrationResponse>, Conflict<Error>>> (
                 RegisterCommand command, IDispatcher dispatcher, CancellationToken ct) =>
             {
                 var result = await dispatcher.Send(command, ct);

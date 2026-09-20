@@ -1,11 +1,6 @@
 namespace MovieRental.Host.Pages;
 
-public sealed class CinemaModel(IConfiguration configuration) : AppPageModel
+public sealed class CinemaModel(IPageShellFactory shell) : AppPageModel
 {
-    public void OnGet() => View = new AppPageViewModel(
-        Title: "Cinema seats — Reel & Row",
-        Tagline: "Pick your row, see what is already taken, book in one pass.",
-        ActiveNav: "cinema",
-        ReactMount: "cinema",
-        Assets: FrontendAssets.From(configuration));
+    public void OnGet() => View = shell.Create("nav.cinema", "footer.note", "cinema", "cinema");
 }

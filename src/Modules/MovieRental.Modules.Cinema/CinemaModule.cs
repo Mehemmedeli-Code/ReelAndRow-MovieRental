@@ -21,5 +21,7 @@ public sealed class CinemaModule : IModule
     {
         SeatMapEndpoints.Map(endpoints);
         BookSeatsEndpoint.Map(endpoints);
+        MoviesOnDisplayEndpoint.Map(endpoints);
+        ManageScreeningsEndpoints.Map(endpoints);
     }
 }

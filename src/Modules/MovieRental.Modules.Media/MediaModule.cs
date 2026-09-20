@@ -20,6 +20,10 @@ public sealed class MediaModule : IModule
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
         UploadShortFilmEndpoints.Map(endpoints);
+        StudioEndpoints.Map(endpoints);
+        StreamShortFilmEndpoint.Map(endpoints);
+        GalleryEndpoints.Map(endpoints);
+        SecurityReviewEndpoints.Map(endpoints);
         ReviewShortFilmEndpoints.Map(endpoints);
     }
 }
