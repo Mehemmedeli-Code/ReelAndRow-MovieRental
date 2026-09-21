@@ -202,5 +202,13 @@
   "field.videoFile": "MP4, MOV, WEBM, MKV — en fazla 512 MB",
   "field.titleHint": "Son tramvay",
   "featured.title": "Ön rafta",
-  "featured.lede": "En iyi puan alan filmler. Sürükleyin, okları veya klavyeyi kullanın."
+  "featured.lede": "En iyi puan alan filmler. Sürükleyin, okları veya klavyeyi kullanın.",
+  "movie.watch": "İzle",
+  "movie.details": "Ayrıntılar",
+  "movie.trailer": "Fragman",
+  "movie.noVideo": "Video henüz eklenmedi",
+  "movie.reviews": "Yorumlar",
+  "field.videoUrl": "Film video bağlantısı",
+  "field.trailerUrl": "Fragman bağlantısı",
+  "movie.rented": "yedi gün senin"
 }

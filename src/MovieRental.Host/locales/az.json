@@ -202,5 +202,13 @@
   "field.videoFile": "MP4, MOV, WEBM, MKV — maks. 512 MB",
   "field.titleHint": "Son tramvay",
   "featured.title": "Diqqətçəkənlər",
-  "featured.lede": "Ən yüksək qiymətləndirilən filmlər. Sürüşdür, oxlarla və ya klaviatura ilə gəz."
+  "featured.lede": "Ən yüksək qiymətləndirilən filmlər. Sürüşdür, oxlarla və ya klaviatura ilə gəz.",
+  "movie.watch": "İzlə",
+  "movie.details": "Ətraflı",
+  "movie.trailer": "Treyler",
+  "movie.noVideo": "Video hələ əlavə edilməyib",
+  "movie.reviews": "Rəylər",
+  "field.videoUrl": "Film video linki",
+  "field.trailerUrl": "Treyler linki",
+  "movie.rented": "7 gün sənindir"
 }

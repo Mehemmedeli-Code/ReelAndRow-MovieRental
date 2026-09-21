@@ -29,7 +29,7 @@ public static class DevelopmentDatabaseBootstrapper
     /// a schema that is present but out of date — which fails later, at query time, with a
     /// far less obvious error. Production uses real migrations and never reads this.
     /// </summary>
-    private const string SchemaStamp = "2026-09-12-security-galleries-i18n";
+    private const string SchemaStamp = "2026-09-13-watch-video-url";
 
     public static async Task InitialiseAsync(IServiceProvider services, CancellationToken ct = default)
     {
