@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { Clapperboard, Star } from "lucide-react";
+import { Clapperboard, Info, Play, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatMoney, formatRuntime } from "@/lib/format";
@@ -19,17 +19,21 @@ export interface MovieListItem {
   reviewCount: number;
   posterUrl?: string | null;
   isDeleted: boolean;
+  hasVideo: boolean;
 }
 
 export function MovieCard({
   movie,
   index,
   onRent,
+  onOpen,
   busy,
 }: {
   movie: MovieListItem;
   index: number;
   onRent?: (movie: MovieListItem) => void;
+  /** Opens the dialog, either on the description or straight into the player. */
+  onOpen?: (movie: MovieListItem, mode: "details" | "watch") => void;
   busy?: boolean;
 }) {
   const available = movie.availableCopies > 0;
@@ -75,19 +79,44 @@ export function MovieCard({
           )}
         </div>
 
-        <div className="mt-auto flex items-center justify-between gap-3 pt-2">
-          <div>
+        <div className="mt-auto pt-2">
+          <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-ink">{formatMoney(movie.dailyPrice)}<span className="text-ink-mute"> / day</span></p>
-            <Badge tone={available ? "good" : "bad"} className="mt-1.5">
+            <Badge tone={available ? "good" : "bad"}>
               {available ? `${movie.availableCopies} ${t("movie.onShelf")}` : t("movie.allOut")}
             </Badge>
           </div>
 
-          {onRent ? (
-            <Button size="sm" disabled={!available || busy} onClick={() => onRent(movie)}>
-              {busy ? t("movie.renting") : t("movie.rent")}
-            </Button>
-          ) : null}
+          {/* Renting and watching are different intentions, so they get different buttons.
+              Watch stays disabled until a film actually has a video behind it — a button
+              that opens an empty player is worse than one that is visibly not ready. */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {onOpen ? (
+              <Button size="sm" variant="outline" onClick={() => onOpen(movie, "details")}>
+                <Info size={14} aria-hidden />
+                {t("movie.details")}
+              </Button>
+            ) : null}
+
+            {onOpen ? (
+              <Button
+                size="sm"
+                variant={movie.hasVideo ? "solid" : "outline"}
+                disabled={!movie.hasVideo}
+                title={movie.hasVideo ? undefined : t("movie.noVideo")}
+                onClick={() => onOpen(movie, "watch")}
+              >
+                <Play size={14} aria-hidden />
+                {t("movie.watch")}
+              </Button>
+            ) : null}
+
+            {onRent ? (
+              <Button size="sm" variant="outline" disabled={!available || busy} onClick={() => onRent(movie)}>
+                {busy ? t("movie.renting") : t("movie.rent")}
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
     </motion.article>

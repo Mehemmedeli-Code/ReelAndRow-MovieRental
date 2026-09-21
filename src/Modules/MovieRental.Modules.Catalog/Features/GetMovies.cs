@@ -69,7 +69,7 @@ internal sealed class GetMoviesHandler(CatalogDbContext db)
             .Select(m => new MovieListItem(
                 m.Id, m.Title, m.Slug, m.Genre, m.ReleaseYear, m.DurationMinutes,
                 m.DailyPrice, m.AvailableCopies, m.TotalCopies, m.AverageRating, m.ReviewCount,
-                m.PosterUrl, m.IsDeleted))
+                m.PosterUrl, m.IsDeleted, m.VideoUrl != null && m.VideoUrl != ""))
             .ToListAsync(ct);
 
         return new PagedResult<MovieListItem>(items, page, pageSize, total);

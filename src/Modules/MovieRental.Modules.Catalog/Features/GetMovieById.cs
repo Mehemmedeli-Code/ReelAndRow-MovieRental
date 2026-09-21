@@ -18,7 +18,7 @@ internal sealed class GetMovieByIdHandler(CatalogDbContext db) : IQueryHandler<G
             .Where(m => m.Id == query.Id)
             .Select(m => new MovieDetail(
                 m.Id, m.Title, m.Slug, m.Description, m.Genre, m.ReleaseYear, m.DurationMinutes,
-                m.Director, m.PosterUrl, m.TrailerUrl, m.DailyPrice, m.AvailableCopies, m.TotalCopies,
+                m.Director, m.PosterUrl, m.TrailerUrl, m.VideoUrl, m.DailyPrice, m.AvailableCopies, m.TotalCopies,
                 m.AverageRating, m.ReviewCount,
                 m.Reviews.OrderByDescending(r => r.CreatedAtUtc)
                     .Select(r => new ReviewResponse(r.Id, r.UserId, r.AuthorName, r.Stars, r.Comment, r.CreatedAtUtc))

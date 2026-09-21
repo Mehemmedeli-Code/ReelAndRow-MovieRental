@@ -14,6 +14,10 @@ public sealed class Movie : BaseEntity, ISoftDeletable
     public string? PosterUrl { get; set; }
     public string? TrailerUrl { get; set; }
 
+    /// <summary>Where the full film plays. Separate from the trailer on purpose: the two are
+    /// different lengths, different audiences and, often, different hosts.</summary>
+    public string? VideoUrl { get; set; }
+
     public decimal DailyPrice { get; set; }
     public int TotalCopies { get; set; }
     public int AvailableCopies { get; set; }
