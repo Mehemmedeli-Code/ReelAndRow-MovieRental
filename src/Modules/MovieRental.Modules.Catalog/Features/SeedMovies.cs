@@ -24,6 +24,7 @@ public sealed class MovieSeedItem
     [JsonPropertyName("director")] public string? Director { get; set; }
     [JsonPropertyName("posterUrl")] public string? PosterUrl { get; set; }
     [JsonPropertyName("trailerUrl")] public string? TrailerUrl { get; set; }
+    [JsonPropertyName("videoUrl")] public string? VideoUrl { get; set; }
     [JsonPropertyName("dailyPrice")] public decimal DailyPrice { get; set; } = 2.50m;
     [JsonPropertyName("copies")] public int Copies { get; set; } = 3;
 }
@@ -65,6 +66,7 @@ internal sealed class SeedMoviesHandler(CatalogDbContext db) : ICommandHandler<S
                     Director = item.Director,
                     PosterUrl = item.PosterUrl,
                     TrailerUrl = item.TrailerUrl,
+                    VideoUrl = item.VideoUrl,
                     DailyPrice = item.DailyPrice,
                     TotalCopies = item.Copies,
                     AvailableCopies = item.Copies
@@ -77,6 +79,7 @@ internal sealed class SeedMoviesHandler(CatalogDbContext db) : ICommandHandler<S
                 existing.Genre = item.Genre;
                 existing.PosterUrl = item.PosterUrl ?? existing.PosterUrl;
                 existing.TrailerUrl = item.TrailerUrl ?? existing.TrailerUrl;
+                existing.VideoUrl = item.VideoUrl ?? existing.VideoUrl;
                 existing.DailyPrice = item.DailyPrice;
                 updated++;
             }

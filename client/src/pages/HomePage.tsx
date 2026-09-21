@@ -4,6 +4,8 @@ import StackSpread from "@/components/ui/stack-spread";
 import { MovieCarousel } from "@/components/ui/movie-carousel";
 import { MovieCard, type MovieListItem } from "@/components/MovieCard";
 import { Section, Notice, Empty, Spinner } from "@/components/Shell";
+import { Toaster, type ToastMessage } from "@/components/Toast";
+import { MovieDialog } from "@/components/MovieDialog";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { useAuth } from "@/components/useAuth";
@@ -35,14 +37,18 @@ export default function HomePage() {
   const [featured, setFeatured] = useState<MovieListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [dialog, setDialog] = useState<{ id: string; mode: "details" | "watch" } | null>(null);
   const [rentingId, setRentingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    get<Paged<MovieListItem>>("/api/movies" + query({ sortBy: "rating", sortDir: "desc", pageSize: 8 }))
-      .then((page) => setFeatured(page.items))
-      .catch(() => setFeatured([]));
+  const refreshFeatured = useCallback(async () => {
+    const page = await get<Paged<MovieListItem>>(
+      "/api/movies" + query({ sortBy: "rating", sortDir: "desc", pageSize: 8 }),
+    ).catch(() => null);
+    if (page) setFeatured(page.items);
   }, []);
+
+  useEffect(() => { void refreshFeatured(); }, [refreshFeatured]);
 
   // Debounce keeps the catalogue responsive without a request per keystroke.
   useEffect(() => {
@@ -87,13 +93,16 @@ export default function HomePage() {
     }
 
     setRentingId(movie.id);
-    setMessage(null);
     try {
       await post("/api/rentals", { movieId: movie.id, days: 7 });
-      setMessage(`${movie.title} is yours for seven days.`);
-      await load();
+      setToast({ id: Date.now(), tone: "ok", text: `${movie.title} — ${t("movie.rented")}` });
+      await Promise.all([load(), refreshFeatured()]);
     } catch (err) {
-      setMessage(err instanceof ApiError ? err.message : t("error.rental"));
+      setToast({
+        id: Date.now(),
+        tone: "error",
+        text: err instanceof ApiError ? err.message : t("error.rental"),
+      });
     } finally {
       setRentingId(null);
     }
@@ -101,6 +110,20 @@ export default function HomePage() {
 
   return (
     <>
+      <Toaster toast={toast} onDismiss={() => setToast(null)} />
+
+      {dialog ? (
+        <MovieDialog
+          movieId={dialog.id}
+          mode={dialog.mode}
+          onClose={() => setDialog(null)}
+          onRent={(id) => {
+            const movie = [...featured, ...(data?.items ?? [])].find((m) => m.id === id);
+            if (movie) { setDialog(null); void rent(movie); }
+          }}
+        />
+      ) : null}
+
       <StackSpread
         headline={t("home.hero.a")}
         headlineMuted={t("home.hero.b")}
@@ -114,7 +137,12 @@ export default function HomePage() {
 
       {featured.length > 0 ? (
         <Section title={t("featured.title")} lede={t("featured.lede")}>
-          <MovieCarousel movies={featured} onRent={rent} busyId={rentingId} />
+          <MovieCarousel
+            movies={featured}
+            onRent={rent}
+            onOpen={(m, mode) => setDialog({ id: m.id, mode })}
+            busyId={rentingId}
+          />
         </Section>
       ) : null}
 
@@ -167,7 +195,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {message ? <div className="mb-4"><Notice tone="info">{message}</Notice></div> : null}
         {error ? <Notice tone="error">{error}</Notice> : null}
 
         {loading && !data ? <Spinner label={t("home.loading")} /> : null}
@@ -184,7 +211,14 @@ export default function HomePage() {
           <>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
               {data.items.map((movie, i) => (
-                <MovieCard key={movie.id} movie={movie} index={i} onRent={rent} busy={rentingId === movie.id} />
+                <MovieCard
+                  key={movie.id}
+                  movie={movie}
+                  index={i}
+                  onRent={rent}
+                  onOpen={(m, mode) => setDialog({ id: m.id, mode })}
+                  busy={rentingId === movie.id}
+                />
               ))}
             </div>
 
