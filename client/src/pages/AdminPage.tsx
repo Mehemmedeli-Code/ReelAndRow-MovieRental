@@ -43,6 +43,7 @@ const BLANK = {
   director: "",
   posterUrl: "",
   trailerUrl: "",
+  videoUrl: "",
   dailyPrice: 2.5,
   totalCopies: 3,
 };
@@ -215,6 +216,8 @@ export default function AdminPage() {
               </div>
               <Field label={t("sort.price")}><Input type="number" step="0.25" value={draft.dailyPrice} onChange={(e) => setDraft({ ...draft, dailyPrice: Number(e.target.value) })} /></Field>
               <Field label={t("field.posterUrl")}><Input value={draft.posterUrl} onChange={(e) => setDraft({ ...draft, posterUrl: e.target.value })} /></Field>
+              <Field label={t("field.videoUrl")} hint="YouTube, Vimeo or a direct .mp4"><Input value={draft.videoUrl} onChange={(e) => setDraft({ ...draft, videoUrl: e.target.value })} /></Field>
+              <Field label={t("field.trailerUrl")}><Input value={draft.trailerUrl} onChange={(e) => setDraft({ ...draft, trailerUrl: e.target.value })} /></Field>
               <Field label={t("field.description")}><Textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></Field>
 
               <Button

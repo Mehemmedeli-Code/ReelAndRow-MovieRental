@@ -16,7 +16,7 @@ namespace MovieRental.Modules.Catalog.Features;
 
 public sealed record CreateMovieCommand(
     string Title, string Description, string Genre, int ReleaseYear, int DurationMinutes,
-    string? Director, string? PosterUrl, string? TrailerUrl, decimal DailyPrice, int TotalCopies)
+    string? Director, string? PosterUrl, string? TrailerUrl, string? VideoUrl, decimal DailyPrice, int TotalCopies)
     : ICommand<Result<MovieListItem>>;
 
 internal sealed class CreateMovieValidator : AbstractValidator<CreateMovieCommand>
@@ -51,6 +51,7 @@ internal sealed class CreateMovieHandler(CatalogDbContext db) : ICommandHandler<
             Director = command.Director?.Trim(),
             PosterUrl = command.PosterUrl?.Trim(),
             TrailerUrl = command.TrailerUrl?.Trim(),
+            VideoUrl = command.VideoUrl?.Trim(),
             DailyPrice = command.DailyPrice,
             TotalCopies = command.TotalCopies,
             AvailableCopies = command.TotalCopies
@@ -64,7 +65,7 @@ internal sealed class CreateMovieHandler(CatalogDbContext db) : ICommandHandler<
 
 public sealed record UpdateMovieCommand(
     Guid Id, string Title, string Description, string Genre, int ReleaseYear, int DurationMinutes,
-    string? Director, string? PosterUrl, string? TrailerUrl, decimal DailyPrice) : ICommand<Result>;
+    string? Director, string? PosterUrl, string? TrailerUrl, string? VideoUrl, decimal DailyPrice) : ICommand<Result>;
 
 internal sealed class UpdateMovieHandler(CatalogDbContext db) : ICommandHandler<UpdateMovieCommand, Result>
 {
@@ -82,6 +83,7 @@ internal sealed class UpdateMovieHandler(CatalogDbContext db) : ICommandHandler<
         movie.Director = command.Director?.Trim();
         movie.PosterUrl = command.PosterUrl?.Trim();
         movie.TrailerUrl = command.TrailerUrl?.Trim();
+        movie.VideoUrl = command.VideoUrl?.Trim();
         movie.DailyPrice = command.DailyPrice;
 
         await db.SaveChangesAsync(ct);
@@ -189,5 +191,6 @@ internal static class MovieMapper
 {
     public static MovieListItem ToListItem(this Movie m) => new(
         m.Id, m.Title, m.Slug, m.Genre, m.ReleaseYear, m.DurationMinutes, m.DailyPrice,
-        m.AvailableCopies, m.TotalCopies, m.AverageRating, m.ReviewCount, m.PosterUrl, m.IsDeleted);
+        m.AvailableCopies, m.TotalCopies, m.AverageRating, m.ReviewCount, m.PosterUrl, m.IsDeleted,
+        !string.IsNullOrWhiteSpace(m.VideoUrl));
 }

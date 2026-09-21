@@ -202,5 +202,13 @@
   "field.videoFile": "MP4, MOV, WEBM, MKV — до 512 МБ",
   "field.titleHint": "Последний трамвай",
   "featured.title": "На видном месте",
-  "featured.lede": "Фильмы с лучшими отзывами. Перетащите, используйте стрелки или клавиатуру."
+  "featured.lede": "Фильмы с лучшими отзывами. Перетащите, используйте стрелки или клавиатуру.",
+  "movie.watch": "Смотреть",
+  "movie.details": "Подробнее",
+  "movie.trailer": "Трейлер",
+  "movie.noVideo": "Видео пока не добавлено",
+  "movie.reviews": "Отзывы",
+  "field.videoUrl": "Ссылка на фильм",
+  "field.trailerUrl": "Ссылка на трейлер",
+  "movie.rented": "ваш на семь дней"
 }

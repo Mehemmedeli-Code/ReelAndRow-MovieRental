@@ -58,6 +58,10 @@ html.rr { background: var(--surface); }
   border-bottom: 1px solid var(--line);
 }
 
+/* The glow lives in the SVG filter, so the mark needs no plate behind it — that is what
+   keeps the corners transparent instead of showing a grey square. */
+.rr-eye { overflow: visible; }
+
 .rr-wordmark {
   display: inline-flex;
   align-items: center;
