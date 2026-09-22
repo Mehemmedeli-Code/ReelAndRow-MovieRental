@@ -25,6 +25,7 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             e.Property(x => x.Description).HasMaxLength(4000);
             e.Property(x => x.PosterUrl).HasMaxLength(500);
             e.Property(x => x.TrailerUrl).HasMaxLength(500);
+            e.Property(x => x.VideoUrl).HasMaxLength(500);
             e.Property(x => x.DailyPrice).HasPrecision(10, 2);
 
             // Optimistic concurrency: two admins editing stock at the same time must not

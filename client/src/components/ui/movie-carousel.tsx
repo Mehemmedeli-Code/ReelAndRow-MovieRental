@@ -83,10 +83,12 @@ function posterFor(movie: MovieListItem) {
 export function MovieCarousel({
   movies,
   onRent,
+  onOpen,
   busyId,
 }: {
   movies: MovieListItem[];
   onRent?: (movie: MovieListItem) => void;
+  onOpen?: (movie: MovieListItem, mode: "details" | "watch") => void;
   busyId?: string | null;
 }) {
   const progress = useMotionValue(0);
@@ -193,17 +195,36 @@ export function MovieCarousel({
             {current.genre} · {current.releaseYear} · {formatMoney(current.dailyPrice)}
           </p>
 
-          {onRent ? (
-            <Button
-              className="mt-3"
-              size="sm"
-              disabled={current.availableCopies === 0 || busyId === current.id}
-              onClick={() => onRent(current)}
-            >
-              {busyId === current.id ? t("movie.renting")
-                : current.availableCopies === 0 ? t("movie.allOut") : t("movie.rent")}
-            </Button>
-          ) : null}
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {onOpen ? (
+              <Button size="sm" variant="outline" onClick={() => onOpen(current, "details")}>
+                {t("movie.details")}
+              </Button>
+            ) : null}
+
+            {onOpen ? (
+              <Button
+                size="sm"
+                disabled={!current.hasVideo}
+                title={current.hasVideo ? undefined : t("movie.noVideo")}
+                onClick={() => onOpen(current, "watch")}
+              >
+                {t("movie.watch")}
+              </Button>
+            ) : null}
+
+            {onRent ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={current.availableCopies === 0 || busyId === current.id}
+                onClick={() => onRent(current)}
+              >
+                {busyId === current.id ? t("movie.renting")
+                  : current.availableCopies === 0 ? t("movie.allOut") : t("movie.rent")}
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
