@@ -11,6 +11,7 @@ public sealed class CinemaDbContext(DbContextOptions<CinemaDbContext> options) :
 
     public DbSet<Screening> Screenings => Set<Screening>();
     public DbSet<SeatBooking> SeatBookings => Set<SeatBooking>();
+    public DbSet<SeatPayment> SeatPayments => Set<SeatPayment>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -41,6 +42,27 @@ public sealed class CinemaDbContext(DbContextOptions<CinemaDbContext> options) :
             e.HasIndex(x => new { x.ScreeningId, x.Row, x.Number })
              .IsUnique()
              .HasFilter("[IsDeleted] = 0");
+        });
+
+        b.Entity<SeatPayment>(e =>
+        {
+            e.ToTable("SeatPayments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Reference).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Amount).HasPrecision(10, 2);
+            e.Property(x => x.Last4).HasMaxLength(4).IsRequired();
+            e.Property(x => x.CardHolder).HasMaxLength(120).IsRequired();
+            e.Property(x => x.CodeHash).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Salt).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Brand).HasConversion<int>();
+            e.Property(x => x.Status).HasConversion<int>();
+            e.HasIndex(x => x.Reference).IsUnique();
+            e.HasIndex(x => new { x.ScreeningId, x.Status, x.ExpiresAtUtc });
+
+            // Deleting the payment takes its held seats with it, which is exactly what a
+            // cancelled or expired checkout should do.
+            e.HasMany(x => x.Seats).WithOne(x => x.Payment!)
+             .HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Cascade);
         });
 
         base.OnModelCreating(b);

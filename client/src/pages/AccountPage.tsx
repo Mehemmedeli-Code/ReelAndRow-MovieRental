@@ -35,9 +35,13 @@ export default function AccountPage() {
     setBusy(true); setMessage(null); setFieldErrors({});
     try {
       auth.apply(await post<AuthResponse>("/api/auth/login", { email, password }));
+
       // A full reload, not a client-side redirect: the session cookie has just been set and
-      // the Razor shell needs to re-render its nav with the new role.
-      window.location.href = "/";
+      // the Razor shell needs to re-render its nav with the new role. Only same-site paths
+      // are followed — an open redirect here would be handed out by every sign-in link.
+      const requested = new URLSearchParams(window.location.search).get("returnUrl");
+      const safe = requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/";
+      window.location.href = safe;
     } catch (err) {
       const api = fail(err, "Could not sign in.");
       if (api?.code === "email_unconfirmed") {

@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Section, Panel, Notice, Spinner, Empty } from "@/components/Shell";
+import { BookingFlow, type SeatSelection } from "@/components/BookingFlow";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/useAuth";
-import { get, post, ApiError } from "@/lib/api";
+import { get } from "@/lib/api";
 import { formatDateTime, formatMoney } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { t, languageName } from "@/lib/i18n";
 
 interface Screening {
   id: string;
@@ -15,6 +16,8 @@ interface Screening {
   seatPrice: number;
   capacity: number;
   seatsTaken: number;
+  audioLanguage: string;
+  subtitleLanguage?: string | null;
 }
 
 interface SeatState {
@@ -32,6 +35,8 @@ interface SeatMap {
   rows: number;
   seatsPerRow: number;
   seatPrice: number;
+  audioLanguage: string;
+  subtitleLanguage?: string | null;
   seats: SeatState[];
 }
 
@@ -45,13 +50,31 @@ export default function CinemaPage() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ tone: "ok" | "error" | "info"; text: string } | null>(null);
-  const [booking, setBooking] = useState(false);
+  // Null until the visitor commits to paying; the flow owns everything after that.
+  const [checkoutSeats, setCheckoutSeats] = useState<SeatSelection[] | null>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("screening");
+
     get<Screening[]>("/api/screenings")
       .then((list) => {
         setScreenings(list);
-        setActiveId(list[0]?.id ?? null);
+
+        if (!requested) {
+          setActiveId(list[0]?.id ?? null);
+          return;
+        }
+
+        if (list.some((item) => item.id === requested)) {
+          setActiveId(requested);
+          return;
+        }
+
+        // Asked for a performance that is not in the list. Say so rather than opening a
+        // different showing of the same film and letting the visitor book the wrong seat.
+        setActiveId(null);
+        setMessage({ tone: "error", text: t("cinema.gone") });
       })
       .catch(() => setMessage({ tone: "error", text: t("error.screenings") }))
       .finally(() => setLoading(false));
@@ -70,6 +93,11 @@ export default function CinemaPage() {
     if (activeId) void loadMap(activeId);
   }, [activeId, loadMap]);
 
+  useEffect(() => {
+    if (!activeId) return;
+    activeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeId]);
+
   function toggleSeat(seat: SeatState) {
     if (seat.isTaken) return;
     setPicked((current) => {
@@ -80,30 +108,22 @@ export default function CinemaPage() {
     });
   }
 
-  async function book() {
+  function startCheckout() {
     if (!map || picked.size === 0) return;
+
+    // No account, no checkout. Sent straight to sign-in, carrying the way back so the
+    // chosen performance is still on screen afterwards.
     if (!isSignedIn) {
-      window.location.href = "/account";
+      const back = `/cinema?screening=${map.screeningId}`;
+      window.location.href = `/account?returnUrl=${encodeURIComponent(back)}`;
       return;
     }
 
-    setBooking(true);
     setMessage(null);
-    const seats = [...picked].map((key) => {
+    setCheckoutSeats([...picked].map((key) => {
       const [row, number] = key.split(":").map(Number);
       return { row, number };
-    });
-
-    try {
-      await post(`/api/screenings/${map.screeningId}/bookings`, { seats });
-      setMessage({ tone: "ok", text: `Booked ${seats.length} seat${seats.length === 1 ? "" : "s"}. See you there.` });
-      await loadMap(map.screeningId);
-    } catch (err) {
-      setMessage({ tone: "error", text: err instanceof ApiError ? err.message : t("error.booking") });
-      await loadMap(map.screeningId);
-    } finally {
-      setBooking(false);
-    }
+    }));
   }
 
   const total = map ? map.seatPrice * picked.size : 0;
@@ -124,15 +144,25 @@ export default function CinemaPage() {
               return (
                 <button
                   key={screening.id}
+                  ref={isActive ? activeRef : undefined}
                   onClick={() => setActiveId(screening.id)}
                   aria-pressed={isActive}
+                  aria-current={isActive ? "true" : undefined}
                   className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                    isActive ? "border-accent bg-surface-raised" : "border-line hover:border-accent-dim"
+                    isActive
+                      ? "border-accent bg-surface-raised ring-2 ring-accent/40"
+                      : "border-line hover:border-accent-dim"
                   }`}
                 >
                   <p className="font-display text-base text-ink">{screening.movieTitle}</p>
                   <p className="mt-1 text-xs text-ink-mute">
                     {screening.hall} · {formatDateTime(screening.startsAtUtc)}
+                  </p>
+                  <p className="mt-1 text-xs text-ink-mute">
+                    {languageName(screening.audioLanguage)}
+                    {screening.subtitleLanguage
+                      ? ` · ${t("onDisplay.subtitles")}: ${languageName(screening.subtitleLanguage)}`
+                      : ""}
                   </p>
                   <p className="mt-1 text-xs text-accent">
                     {screening.capacity - screening.seatsTaken} of {screening.capacity} free
@@ -151,6 +181,12 @@ export default function CinemaPage() {
                   <h3 className="font-display text-2xl text-ink">{map.movieTitle}</h3>
                   <p className="text-sm text-ink-mute">
                     {map.hall} · {formatDateTime(map.startsAtUtc)} · {formatMoney(map.seatPrice)} a seat
+                  </p>
+                  <p className="mt-1 text-sm text-accent">
+                    {languageName(map.audioLanguage)}
+                    {map.subtitleLanguage
+                      ? ` · ${t("onDisplay.subtitles")}: ${languageName(map.subtitleLanguage)}`
+                      : ""}
                   </p>
                 </div>
 
@@ -203,20 +239,32 @@ export default function CinemaPage() {
                   <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm border border-accent-dim/60" />{t("cinema.free")}</span>
                   <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-accent" />{t("cinema.selected")}</span>
                   <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-line" />{t("cinema.taken")}</span>
-                  <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-accent-dim" />Yours</span>
+                  <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-accent-dim" />{t("cinema.yours", "Yours")}</span>
                 </div>
 
                 {message ? <div className="mt-4"><Notice tone={message.tone}>{message.text}</Notice></div> : null}
 
-                <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-4">
-                  <p className="text-sm text-ink-mute">
-                    {picked.size === 0
-                      ? t("cinema.noSeats")
-                      : `${picked.size} seat${picked.size === 1 ? "" : "s"} · ${formatMoney(total)}`}
-                  </p>
-                  <Button disabled={picked.size === 0 || booking} onClick={book}>
-                    {booking ? t("cinema.booking") : isSignedIn ? t("cinema.confirm") : t("cinema.signInToBook")}
-                  </Button>
+                <div className="mt-6 border-t border-line pt-4">
+                  {checkoutSeats ? (
+                    <BookingFlow
+                      screeningId={map.screeningId}
+                      seats={checkoutSeats}
+                      seatPrice={map.seatPrice}
+                      onCancel={() => { setCheckoutSeats(null); void loadMap(map.screeningId); }}
+                      onBooked={() => { setPicked(new Set()); void loadMap(map.screeningId); }}
+                    />
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <p className="text-sm text-ink-mute">
+                        {picked.size === 0
+                          ? t("cinema.noSeats")
+                          : `${picked.size} · ${formatMoney(total)}`}
+                      </p>
+                      <Button disabled={picked.size === 0} onClick={startCheckout}>
+                        {isSignedIn ? t("book.confirmSeats") : t("cinema.signInToBook")}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </>
             )}

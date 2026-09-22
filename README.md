@@ -162,6 +162,7 @@ Repeat per context: `IdentityDbContext`, `CatalogDbContext`, `RentalsDbContext`,
 | Ratings and reviews | `Modules.Catalog/Features/AddReview.cs` |
 | Due-date notifications | `Modules.Rentals/Infrastructure/DueDateNotificationService.cs` |
 | Cinema seat map and booking | `Modules.Cinema/Features/{SeatMap,BookSeats}.cs` |
+| Card checkout, e-mailed code, QR ticket | `Modules.Cinema/Features/BookSeats.cs`, `Domain/SeatPayment.cs` |
 | Movies on Display + screening admin | `Modules.Cinema/Features/{MoviesOnDisplay,ManageScreenings}.cs` |
 | Short-film upload | `Modules.Media/Features/UploadShortFilm.cs` |
 | Studio workspace, visibility, threads | `Modules.Media/Features/StudioWorkspace.cs` |
@@ -200,6 +201,28 @@ A film reaches a public gallery only when it is **Approved** *and* its author ha
 **Public**. Which gallery is decided by the origin declared at upload — AI Catalog or Human
 Craft. Video is served through an authorising endpoint, never as a static file, so a private
 film cannot be reached by guessing its URL.
+
+## Booking and payment
+
+Choosing seats and owning them are two different things, so booking is two steps.
+
+1. **Checkout.** The card is validated — Luhn, brand prefix, expiry, CVC length — then the
+   seats are written to the database *unconfirmed*, under a `SeatPayment`, and a six-digit
+   code is e-mailed. Writing the rows immediately is what makes the hold real: the unique
+   index on `(ScreeningId, Row, Number)` is the only thing that can truthfully stop two
+   people paying for the same seat, and an in-memory reservation would not be covered by it.
+2. **Confirm.** The code turns the hold into a ticket with a reference and a QR code.
+
+Holds last fifteen minutes. Expired ones are deleted — not soft-deleted, because the unique
+index counts filtered rows and a lingering row would block the seat forever.
+
+**The card is never stored.** The number and CVC are validated and discarded inside the
+handler; only the brand, the last four digits and the cardholder name are persisted. There is
+no acquirer and no money moves — this is a teaching implementation, and the UI says so. What
+it does model correctly is the part students usually get wrong: never keeping the PAN.
+
+Signing in is required before checkout. Pressing Confirm while signed out sends the visitor
+to `/account?returnUrl=…` and back to the same performance afterwards.
 
 ## Verification and delivery
 
