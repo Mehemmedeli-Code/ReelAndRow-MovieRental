@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using MovieRental.Modules.Cinema.Domain;
 using MovieRental.Modules.Cinema.Persistence;
 using MovieRental.SharedKernel.Cqrs;
 using MovieRental.SharedKernel.Security;
@@ -12,13 +13,15 @@ namespace MovieRental.Modules.Cinema.Features;
 // Feature 9 — the seat map behind the booking screen.
 public sealed record ScreeningListItem(
     Guid Id, Guid MovieId, string MovieTitle, string Hall, DateTime StartsAtUtc,
-    decimal SeatPrice, int Capacity, int SeatsTaken);
+    decimal SeatPrice, int Capacity, int SeatsTaken,
+    string AudioLanguage, string? SubtitleLanguage);
 
 public sealed record SeatState(int Row, int Number, bool IsTaken, bool IsMine);
 
 public sealed record SeatMapResponse(
     Guid ScreeningId, string MovieTitle, string Hall, DateTime StartsAtUtc,
-    int Rows, int SeatsPerRow, decimal SeatPrice, IReadOnlyList<SeatState> Seats);
+    int Rows, int SeatsPerRow, decimal SeatPrice,
+    string AudioLanguage, string? SubtitleLanguage, IReadOnlyList<SeatState> Seats);
 
 public sealed record GetScreeningsQuery : IQuery<IReadOnlyList<ScreeningListItem>>;
 
@@ -31,7 +34,7 @@ internal sealed class GetScreeningsHandler(CinemaDbContext db)
             .OrderBy(s => s.StartsAtUtc)
             .Select(s => new ScreeningListItem(
                 s.Id, s.MovieId, s.MovieTitle, s.Hall, s.StartsAtUtc, s.SeatPrice,
-                s.Rows * s.SeatsPerRow, s.Bookings.Count))
+                s.Rows * s.SeatsPerRow, s.Bookings.Count, s.AudioLanguage, s.SubtitleLanguage))
             .ToListAsync(ct);
 }
 
@@ -62,7 +65,8 @@ internal sealed class GetSeatMapHandler(CinemaDbContext db, ICurrentUser current
         }
 
         return new SeatMapResponse(screening.Id, screening.MovieTitle, screening.Hall,
-            screening.StartsAtUtc, screening.Rows, screening.SeatsPerRow, screening.SeatPrice, seats);
+            screening.StartsAtUtc, screening.Rows, screening.SeatsPerRow, screening.SeatPrice,
+            screening.AudioLanguage, screening.SubtitleLanguage, seats);
     }
 }
 

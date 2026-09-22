@@ -34,6 +34,16 @@ public sealed class SeatBooking : BaseEntity, ISoftDeletable
     public int Number { get; set; }
     public decimal PricePaid { get; set; }
 
+    /// <summary>The checkout this seat belongs to. Rows are written at payment time, not at
+    /// confirmation, so the unique index on (screening, row, number) holds the seat against
+    /// everyone else for as long as the code is valid.</summary>
+    public Guid PaymentId { get; set; }
+    public SeatPayment? Payment { get; set; }
+
+    /// <summary>Null while the e-mailed code is still outstanding.</summary>
+    public DateTime? ConfirmedAtUtc { get; set; }
+    public bool IsConfirmed => ConfirmedAtUtc is not null;
+
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAtUtc { get; set; }
 }
