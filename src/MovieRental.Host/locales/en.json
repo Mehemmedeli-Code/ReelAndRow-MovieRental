@@ -202,5 +202,13 @@
   "field.videoFile": "MP4, MOV, WEBM, MKV — max 512 MB",
   "field.titleHint": "The last tram",
   "featured.title": "On the front shelf",
-  "featured.lede": "The best-reviewed titles. Drag, use the arrows, or the arrow keys."
+  "featured.lede": "The best-reviewed titles. Drag, use the arrows, or the arrow keys.",
+  "movie.watch": "Watch",
+  "movie.details": "Show details",
+  "movie.trailer": "Trailer",
+  "movie.noVideo": "No video added yet",
+  "movie.reviews": "Reviews",
+  "field.videoUrl": "Film video URL",
+  "field.trailerUrl": "Trailer URL",
+  "movie.rented": "yours for seven days"
 }
