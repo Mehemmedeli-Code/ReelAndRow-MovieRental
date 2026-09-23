@@ -16,7 +16,7 @@ One solution, two front ends: ASP.NET Core (.NET 10) serving Minimal APIs and Ra
 
 ### Visual Studio 2026
 
-1. Open `MovieRental.sln`.
+1. Open `WatchingYou.sln`.
 2. **MovieRental.Host** is already the startup project.
 3. Press F5.
 
@@ -84,7 +84,7 @@ React — since neither writes anything the other cares about.
 ## How it is put together
 
 ```
-MovieRental.sln
+WatchingYou.sln
 ├── Directory.Build.props        net10.0, nullable, implicit usings for every project
 ├── Directory.Packages.props     central package versions
 ├── src/

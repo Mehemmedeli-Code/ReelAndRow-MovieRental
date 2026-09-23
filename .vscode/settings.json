@@ -1,5 +1,5 @@
 {
-  "dotnet.defaultSolution": "MovieRental.sln",
+  "dotnet.defaultSolution": "WatchingYou.sln",
   "files.exclude": {
     "**/bin": true,
     "**/obj": true

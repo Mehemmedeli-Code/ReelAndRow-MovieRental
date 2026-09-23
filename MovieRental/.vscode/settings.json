@@ -1,8 +1,0 @@
-{
-  "dotnet.defaultSolution": "MovieRental.sln",
-  "files.exclude": {
-    "**/bin": true,
-    "**/obj": true
-  },
-  "tailwindCSS.experimental.classRegex": [["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]]
-}

@@ -1,9 +1,0 @@
-{
-  "recommendations": [
-    "ms-dotnettools.csdevkit",
-    "ms-dotnettools.csharp",
-    "bradlc.vscode-tailwindcss",
-    "dbaeumer.vscode-eslint",
-    "esbenp.prettier-vscode"
-  ]
-}

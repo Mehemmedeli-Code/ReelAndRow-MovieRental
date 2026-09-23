@@ -5,7 +5,7 @@
       "label": "build",
       "type": "shell",
       "command": "dotnet",
-      "args": ["build", "${workspaceFolder}/MovieRental.sln", "/consoleloggerparameters:NoSummary"],
+      "args": ["build", "${workspaceFolder}/WatchingYou.sln", "/consoleloggerparameters:NoSummary"],
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": "$msCompile"
     },
