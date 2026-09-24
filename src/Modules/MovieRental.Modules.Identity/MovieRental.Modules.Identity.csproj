@@ -12,4 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\MovieRental.SharedKernel\MovieRental.SharedKernel.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="Infrastructure\ConsoleSenders.cs" />
+  </ItemGroup>
 </Project>
