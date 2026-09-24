@@ -16,7 +16,7 @@ public sealed record ScreeningListItem(
     decimal SeatPrice, int Capacity, int SeatsTaken,
     string AudioLanguage, string? SubtitleLanguage);
 
-public sealed record SeatState(int Row, int Number, bool IsTaken, bool IsMine);
+public sealed record SeatState(int Row, int Number, bool IsTaken, bool IsMine, bool IsHeld);
 
 public sealed record SeatMapResponse(
     Guid ScreeningId, string MovieTitle, string Hall, DateTime StartsAtUtc,
@@ -52,7 +52,13 @@ internal sealed class GetSeatMapHandler(CinemaDbContext db, ICurrentUser current
         if (screening is null) return null;
 
         var me = currentUser.Id;
-        var taken = screening.Bookings.ToDictionary(b => (b.Row, b.Number), b => b.UserId);
+
+        // A hold whose window has passed is not occupying anything, even if the row is still
+        // there — the sweeper deletes it within the minute, and the map should not lie in
+        // the meantime.
+        var live = screening.Bookings
+            .Where(b => b.ConfirmedAtUtc is not null || b.CreatedAtUtc.AddMinutes(15) > DateTime.UtcNow)
+            .ToDictionary(b => (b.Row, b.Number), b => b);
 
         // The full grid is materialised server-side so the client renders one array
         // instead of reconciling a sparse booking list against seat geometry.
@@ -60,8 +66,17 @@ internal sealed class GetSeatMapHandler(CinemaDbContext db, ICurrentUser current
         for (var row = 1; row <= screening.Rows; row++)
         for (var number = 1; number <= screening.SeatsPerRow; number++)
         {
-            var isTaken = taken.TryGetValue((row, number), out var owner);
-            seats.Add(new SeatState(row, number, isTaken, isTaken && me is not null && owner == me));
+            var occupied = live.TryGetValue((row, number), out var booking);
+            var isHeld = occupied && booking!.ConfirmedAtUtc is null;
+
+            seats.Add(new SeatState(
+                Row: row,
+                Number: number,
+                IsTaken: occupied,
+                // "Mine" means a ticket exists. An unfinished checkout is shown as held, not
+                // owned, so nobody thinks they already have seats they have not confirmed.
+                IsMine: occupied && !isHeld && me is not null && booking!.UserId == me,
+                IsHeld: isHeld));
         }
 
         return new SeatMapResponse(screening.Id, screening.MovieTitle, screening.Hall,

@@ -32,11 +32,13 @@ public sealed record CheckoutStarted(
     Guid PaymentId, string Reference, decimal Amount, string Brand, string Last4,
     string MaskedEmail, DateTime ExpiresAtUtc);
 
+public sealed record TicketSeat(int Row, int Number, string Label, string QrPayload);
+
 public sealed record TicketResponse(
     string Reference, string MovieTitle, string Hall, DateTime StartsAtUtc,
     string AudioLanguage, string? SubtitleLanguage,
-    IReadOnlyList<SeatSelection> Seats, decimal Amount, string Brand, string Last4,
-    DateTime ConfirmedAtUtc, string QrPayload);
+    IReadOnlyList<TicketSeat> Seats, decimal Amount, string Brand, string Last4,
+    DateTime ConfirmedAtUtc);
 
 internal sealed class CheckoutValidator : AbstractValidator<CheckoutCommand>
 {
@@ -201,7 +203,7 @@ internal sealed class ConfirmBookingHandler(CinemaDbContext db, ICurrentUser cur
             return Result.Failure<TicketResponse>(Error.Forbidden("This booking belongs to someone else."));
 
         if (payment.Status == PaymentStatus.Confirmed)
-            return Result.Success(ToTicket(payment));
+            return Result.Success(TicketMapper.ToTicket(payment));
 
         if (!payment.IsUsable)
         {
@@ -232,24 +234,114 @@ internal sealed class ConfirmBookingHandler(CinemaDbContext db, ICurrentUser cur
         foreach (var seat in payment.Seats) seat.ConfirmedAtUtc = now;
 
         await db.SaveChangesAsync(ct);
-        return Result.Success(ToTicket(payment));
+        return Result.Success(TicketMapper.ToTicket(payment));
     }
+}
 
-    private static TicketResponse ToTicket(SeatPayment payment) => new(
+public sealed record CancelBookingCommand(Guid PaymentId) : ICommand<Result>;
+
+internal sealed class CancelBookingHandler(CinemaDbContext db, ICurrentUser currentUser)
+    : ICommandHandler<CancelBookingCommand, Result>
+{
+    public async Task<Result> Handle(CancelBookingCommand command, CancellationToken ct)
+    {
+        var payment = await db.SeatPayments
+            .Include(p => p.Seats)
+            .FirstOrDefaultAsync(p => p.Id == command.PaymentId, ct);
+
+        if (payment is null) return Result.Success();                       // already gone
+        if (payment.UserId != currentUser.RequireId())
+            return Result.Failure(Error.Forbidden("This booking belongs to someone else."));
+        if (payment.Status == PaymentStatus.Confirmed)
+            return Result.Failure(Error.Conflict("This booking is already confirmed."));
+
+        // Backing out should free the seats immediately rather than leaving them blocked
+        // for the rest of the hold window.
+        db.SeatBookings.RemoveRange(payment.Seats);
+        payment.Status = PaymentStatus.Cancelled;
+        await db.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+}
+
+public sealed record GetMyTicketsQuery : IQuery<IReadOnlyList<TicketResponse>>;
+
+internal sealed class GetMyTicketsHandler(CinemaDbContext db, ICurrentUser currentUser)
+    : IQueryHandler<GetMyTicketsQuery, IReadOnlyList<TicketResponse>>
+{
+    public async Task<IReadOnlyList<TicketResponse>> Handle(GetMyTicketsQuery query, CancellationToken ct)
+    {
+        var userId = currentUser.RequireId();
+
+        // Tickets are re-read from the database rather than held in the page, so a refresh,
+        // a new tab or a different device all show the same QR code.
+        var payments = await db.SeatPayments.AsNoTracking()
+            .Include(p => p.Seats)
+            .Include(p => p.Screening)
+            .Where(p => p.UserId == userId && p.Status == PaymentStatus.Confirmed)
+            .OrderByDescending(p => p.ConfirmedAtUtc)
+            .Take(20)
+            .ToListAsync(ct);
+
+        return [.. payments.Select(TicketMapper.ToTicket)];
+    }
+}
+
+internal static class TicketMapper
+{
+    /// <summary>A1, B7 — the way seats are printed on a ticket and called out in a hall.</summary>
+    public static string Label(int row, int number) => $"{(char)('A' + row - 1)}{number}";
+
+    public static TicketResponse ToTicket(SeatPayment payment) => new(
         payment.Reference,
         payment.Screening?.MovieTitle ?? "",
         payment.Screening?.Hall ?? "",
         payment.Screening?.StartsAtUtc ?? default,
         payment.Screening?.AudioLanguage ?? "az",
         payment.Screening?.SubtitleLanguage,
-        [.. payment.Seats.OrderBy(s => s.Row).ThenBy(s => s.Number).Select(s => new SeatSelection(s.Row, s.Number))],
+        [.. payment.Seats
+            .OrderBy(s => s.Row).ThenBy(s => s.Number)
+            .Select(s => new TicketSeat(s.Row, s.Number, Label(s.Row, s.Number),
+                // Each seat carries its own payload: the booking reference identifies the
+                // purchase, the seat label identifies which of its seats this is. Enough for
+                // a doorman to check at the gate, and nothing about the card.
+                $"WATCHINGYOU|{payment.Reference}|{payment.ScreeningId:N}|{Label(s.Row, s.Number)}"))],
         payment.Amount,
         payment.Brand.ToString(),
         payment.Last4,
-        payment.ConfirmedAtUtc ?? DateTime.UtcNow,
-        // What the QR encodes. Enough for a doorman to check at the gate, and nothing
-        // about the card.
-        $"WATCHINGYOU|{payment.Reference}|{payment.ScreeningId:N}|{payment.Seats.Count}");
+        payment.ConfirmedAtUtc ?? DateTime.UtcNow);
+}
+
+public sealed record PendingCheckout(
+    Guid PaymentId, Guid ScreeningId, string MovieTitle, string Reference, decimal Amount,
+    string Brand, string Last4, IReadOnlyList<SeatSelection> Seats, DateTime ExpiresAtUtc);
+
+public sealed record GetPendingCheckoutsQuery : IQuery<IReadOnlyList<PendingCheckout>>;
+
+internal sealed class GetPendingCheckoutsHandler(CinemaDbContext db, ICurrentUser currentUser)
+    : IQueryHandler<GetPendingCheckoutsQuery, IReadOnlyList<PendingCheckout>>
+{
+    public async Task<IReadOnlyList<PendingCheckout>> Handle(GetPendingCheckoutsQuery query, CancellationToken ct)
+    {
+        var userId = currentUser.RequireId();
+        var now = DateTime.UtcNow;
+
+        // A checkout that was paid but never confirmed used to be unreachable after a reload:
+        // the seats sat held with no way back to the code screen. Asking the server means the
+        // way back survives a refresh, a new tab or a different device.
+        var pending = await db.SeatPayments.AsNoTracking()
+            .Include(p => p.Seats)
+            .Include(p => p.Screening)
+            .Where(p => p.UserId == userId && p.Status == PaymentStatus.AwaitingCode && p.ExpiresAtUtc > now)
+            .OrderBy(p => p.ExpiresAtUtc)
+            .ToListAsync(ct);
+
+        return [.. pending.Select(p => new PendingCheckout(
+            p.Id, p.ScreeningId, p.Screening?.MovieTitle ?? "", p.Reference, p.Amount,
+            p.Brand.ToString(), p.Last4,
+            [.. p.Seats.OrderBy(x => x.Row).ThenBy(x => x.Number).Select(x => new SeatSelection(x.Row, x.Number))],
+            p.ExpiresAtUtc))];
+    }
 }
 
 public static class BookSeatsEndpoint
@@ -285,5 +377,25 @@ public static class BookSeatsEndpoint
                 };
             })
         .WithName("ConfirmBookingWithId").WithTags("Cinema").RequireAuthorization();
+
+        app.MapPost("/api/bookings/{paymentId:guid}/cancel",
+            async Task<Results<NoContent, Conflict<Error>, ForbidHttpResult>> (
+                Guid paymentId, IDispatcher dispatcher, CancellationToken ct) =>
+            {
+                var result = await dispatcher.Send(new CancelBookingCommand(paymentId), ct);
+                if (result.IsSuccess) return TypedResults.NoContent();
+                return result.Error.Code == "forbidden"
+                    ? TypedResults.Forbid()
+                    : TypedResults.Conflict(result.Error);
+            })
+        .WithName("CancelBookingWithId").WithTags("Cinema").RequireAuthorization();
+
+        app.MapGet("/api/bookings/mine", async (IDispatcher dispatcher, CancellationToken ct) =>
+                Results.Ok(await dispatcher.Ask(new GetMyTicketsQuery(), ct)))
+            .WithName("GetMyTickets").WithTags("Cinema").RequireAuthorization();
+
+        app.MapGet("/api/bookings/pending", async (IDispatcher dispatcher, CancellationToken ct) =>
+                Results.Ok(await dispatcher.Ask(new GetPendingCheckoutsQuery(), ct)))
+            .WithName("GetPendingCheckouts").WithTags("Cinema").RequireAuthorization();
     }
 }

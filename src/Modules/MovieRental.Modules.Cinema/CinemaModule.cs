@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using MovieRental.Modules.Cinema.Features;
+using MovieRental.Modules.Cinema.Infrastructure;
 using MovieRental.Modules.Cinema.Persistence;
 using MovieRental.SharedKernel.Modules;
 
@@ -12,10 +13,16 @@ public sealed class CinemaModule : IModule
 {
     public string Name => "Cinema";
 
-    public void RegisterServices(IServiceCollection services, IConfiguration configuration) =>
+    public void RegisterServices(IServiceCollection services, IConfiguration configuration)
+    {
         services.AddDbContext<CinemaDbContext>(options =>
             options.UseSqlServer(configuration.GetConnectionString("Default"),
                 sql => sql.MigrationsHistoryTable("__EFMigrations", CinemaDbContext.SchemaName)));
+
+        // Sweeps up checkouts that were paid for but never confirmed, so their seats go
+        // back on sale instead of sitting blocked.
+        services.AddHostedService<HoldExpiryService>();
+    }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
