@@ -29,7 +29,7 @@ public static class DevelopmentDatabaseBootstrapper
     /// a schema that is present but out of date — which fails later, at query time, with a
     /// far less obvious error. Production uses real migrations and never reads this.
     /// </summary>
-    private const string SchemaStamp = "2026-09-13-seat-payments";
+    private const string SchemaStamp = "2026-09-13-seat-payments-clean";
 
     public static async Task InitialiseAsync(IServiceProvider services, CancellationToken ct = default)
     {
@@ -60,6 +60,7 @@ public static class DevelopmentDatabaseBootstrapper
         }
 
         await SeedAsync(scope.ServiceProvider, ct);
+        await WriteStampAsync(scope.ServiceProvider, ct);
     }
 
     /// <summary>Compares the stored stamp with the current one and wipes the database when
@@ -91,13 +92,22 @@ public static class DevelopmentDatabaseBootstrapper
 
         await context.Database.EnsureDeletedAsync(ct);
         await creator.CreateAsync(ct);
+    }
 
+    /// <summary>Recorded only once every schema has been created and seeded, so a failure
+    /// part-way through leaves no stamp and the next start rebuilds instead of trusting a
+    /// database that was never finished.</summary>
+    private static async Task WriteStampAsync(IServiceProvider services, CancellationToken ct)
+    {
+        var context = services.GetRequiredService<IdentityDbContext>();
         await context.Database.OpenConnectionAsync(ct);
         try
         {
             await using var write = context.Database.GetDbConnection().CreateCommand();
             write.CommandText = """
-                CREATE TABLE dbo.__SchemaStamp ([Stamp] NVARCHAR(128) NOT NULL);
+                IF OBJECT_ID('dbo.__SchemaStamp', 'U') IS NULL
+                    CREATE TABLE dbo.__SchemaStamp ([Stamp] NVARCHAR(128) NOT NULL);
+                DELETE FROM dbo.__SchemaStamp;
                 INSERT INTO dbo.__SchemaStamp ([Stamp]) VALUES (@stamp);
                 """;
             var parameter = write.CreateParameter();

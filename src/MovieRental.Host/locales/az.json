@@ -228,9 +228,17 @@
   "book.reference": "Bilet nömrəsi",
   "book.seats": "Yerlər",
   "book.total": "Cəmi",
-  "book.showQr": "Girişdə bu QR kodu göstər.",
+  "book.showQr": "Hər yerin öz QR kodu var — girişdə müvafiq kodu göstər.",
   "book.newBooking": "Yeni sifariş",
   "book.back": "Geri",
   "book.simulated": "Bu, nümayiş ödənişidir — real pul köçürülmür.",
-  "cinema.yours": "Səninki"
+  "cinema.yours": "Səninki",
+  "book.myTickets": "Biletlərim",
+  "cinema.held": "Saxlanılır",
+  "book.badMonth": "Ay 01–12 aralığında olmalıdır",
+  "book.expired": "Bu tarix keçib",
+  "book.onlyVisaMc": "Yalnız Visa və Mastercard",
+  "book.unfinished": "Yarımçıq ödənişin var",
+  "book.resume": "Davam et",
+  "book.release": "Yerləri azad et"
 }

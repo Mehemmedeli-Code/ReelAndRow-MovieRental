@@ -59,5 +59,7 @@ internal static class CardValidation
         return lastDay >= DateTime.UtcNow;
     }
 
-    public static bool CvcLooksRight(string cvc) => cvc.Length is 3 or 4 && cvc.All(char.IsDigit);
+    /// <summary>Three digits. Four belongs to American Express, which this checkout refuses
+    /// anyway, so accepting it would only let a typo through.</summary>
+    public static bool CvcLooksRight(string cvc) => cvc.Length == 3 && cvc.All(char.IsDigit);
 }

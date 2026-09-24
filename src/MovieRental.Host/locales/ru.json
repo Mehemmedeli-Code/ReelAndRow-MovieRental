@@ -228,9 +228,17 @@
   "book.reference": "Номер брони",
   "book.seats": "Места",
   "book.total": "Итого",
-  "book.showQr": "Покажите этот QR-код на входе.",
+  "book.showQr": "У каждого места свой QR-код — покажите нужный на входе.",
   "book.newBooking": "Новая бронь",
   "book.back": "Назад",
   "book.simulated": "Это демонстрационный платёж — деньги не списываются.",
-  "cinema.yours": "Ваши"
+  "cinema.yours": "Ваши",
+  "book.myTickets": "Мои билеты",
+  "cinema.held": "Оплачивается",
+  "book.badMonth": "Месяц должен быть 01–12",
+  "book.expired": "Эта дата уже прошла",
+  "book.onlyVisaMc": "Только Visa и Mastercard",
+  "book.unfinished": "У вас есть незавершённая бронь",
+  "book.resume": "Продолжить",
+  "book.release": "Освободить места"
 }

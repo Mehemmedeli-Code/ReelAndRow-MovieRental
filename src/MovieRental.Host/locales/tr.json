@@ -228,9 +228,17 @@
   "book.reference": "Rezervasyon no",
   "book.seats": "Koltuklar",
   "book.total": "Toplam",
-  "book.showQr": "Girişte bu QR kodu gösterin.",
+  "book.showQr": "Her koltuğun kendi QR kodu var — girişte ilgili kodu gösterin.",
   "book.newBooking": "Yeni rezervasyon",
   "book.back": "Geri",
   "book.simulated": "Bu bir demo ödemedir — gerçek para aktarılmaz.",
-  "cinema.yours": "Sizin"
+  "cinema.yours": "Sizin",
+  "book.myTickets": "Biletlerim",
+  "cinema.held": "Ödeniyor",
+  "book.badMonth": "Ay 01–12 arasında olmalı",
+  "book.expired": "Bu tarih geçmiş",
+  "book.onlyVisaMc": "Yalnızca Visa ve Mastercard",
+  "book.unfinished": "Tamamlanmamış bir rezervasyonunuz var",
+  "book.resume": "Devam et",
+  "book.release": "Koltukları bırak"
 }

@@ -59,10 +59,13 @@ public sealed class CinemaDbContext(DbContextOptions<CinemaDbContext> options) :
             e.HasIndex(x => x.Reference).IsUnique();
             e.HasIndex(x => new { x.ScreeningId, x.Status, x.ExpiresAtUtc });
 
-            // Deleting the payment takes its held seats with it, which is exactly what a
-            // cancelled or expired checkout should do.
+            // NoAction, not Cascade. SQL Server refuses two cascade paths to the same table,
+            // and deleting a Screening already reaches SeatBookings directly — a second route
+            // through SeatPayments makes the constraint illegal. Nothing is lost: expired and
+            // cancelled holds are removed explicitly in CheckoutHandler, which is clearer than
+            // relying on a cascade anyway.
             e.HasMany(x => x.Seats).WithOne(x => x.Payment!)
-             .HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Cascade);
+             .HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.NoAction);
         });
 
         base.OnModelCreating(b);

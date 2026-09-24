@@ -11,7 +11,7 @@ import { t, formatWhen, languageName } from "@/lib/i18n";
 
 export interface SeatSelection { row: number; number: number }
 
-interface CheckoutStarted {
+export interface CheckoutStarted {
   paymentId: string;
   reference: string;
   amount: number;
@@ -21,26 +21,70 @@ interface CheckoutStarted {
   expiresAtUtc: string;
 }
 
-interface TicketResponse {
+export interface TicketSeat {
+  row: number;
+  number: number;
+  label: string;
+  qrPayload: string;
+}
+
+export interface TicketResponse {
   reference: string;
   movieTitle: string;
   hall: string;
   startsAtUtc: string;
   audioLanguage: string;
   subtitleLanguage?: string | null;
-  seats: SeatSelection[];
+  seats: TicketSeat[];
   amount: number;
   brand: string;
   last4: string;
   confirmedAtUtc: string;
-  qrPayload: string;
 }
 
 const seatLabel = (seat: SeatSelection) => `${String.fromCharCode(64 + seat.row)}${seat.number}`;
 
+/**
+ * Issuer, by BIN. Only the name is shown, not the bank's logo — a trademark belongs to its
+ * owner and should be dropped in as a licensed asset, not redrawn from memory. Add rows here
+ * as you collect more BINs.
+ */
+const ISSUERS: { prefix: string; name: string }[] = [
+  { prefix: "41697388", name: "Kapital Bank" },
+];
+
+const issuerFor = (digits: string) =>
+  ISSUERS.find((issuer) => digits.startsWith(issuer.prefix))?.name ?? null;
+
+/** Visa starts with 4; Mastercard is 51–55 or the 2221–2720 range added in 2017. */
+function brandFor(digits: string): "Visa" | "Mastercard" | null {
+  if (digits.startsWith("4")) return "Visa";
+  const two = Number(digits.slice(0, 2));
+  if (digits.length >= 2 && two >= 51 && two <= 55) return "Mastercard";
+  const four = Number(digits.slice(0, 4));
+  if (digits.length >= 4 && four >= 2221 && four <= 2720) return "Mastercard";
+  return null;
+}
+
+/** Returns a reason the expiry cannot be right, or null. */
+function expiryProblem(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 4) return null;                       // still typing
+
+  const month = Number(digits.slice(0, 2));
+  const year = 2000 + Number(digits.slice(2, 4));
+  if (month < 1 || month > 12) return t("book.badMonth");
+
+  const now = new Date();
+  const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+  return endOfMonth < now ? t("book.expired") : null;
+}
+
 /** Groups digits in fours as you type. Nothing is validated here — the server decides. */
 const groupDigits = (value: string) =>
-  value.replace(/\D/g, "").slice(0, 19).replace(/(.{4})/g, "$1 ").trim();
+  // Sixteen is the ceiling: Visa and Mastercard are both sixteen digits, and anything
+  // longer is a typo rather than a card we accept.
+  value.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim();
 
 /**
  * Pay, then confirm with the code that arrives by e-mail, then the ticket.
@@ -53,17 +97,25 @@ export function BookingFlow({
   screeningId,
   seats,
   seatPrice,
+  resume,
   onCancel,
   onBooked,
 }: {
   screeningId: string;
   seats: SeatSelection[];
   seatPrice: number;
+  /** An unfinished checkout the server still knows about — skip straight to the code. */
+  resume?: CheckoutStarted | null;
   onCancel: () => void;
   onBooked: () => void;
 }) {
-  const [step, setStep] = useState<"payment" | "code" | "ticket">("payment");
-  const [checkout, setCheckout] = useState<CheckoutStarted | null>(null);
+  // A reload between paying and confirming used to lose the checkout entirely, leaving the
+  // seats held with no way back to them. The handle is small and non-secret — the code
+  // itself only ever exists in the customer's inbox — so parking it here is safe.
+  const RESUME_KEY = `wy.checkout.${screeningId}`;
+
+  const [step, setStep] = useState<"payment" | "code" | "ticket">(resume ? "code" : "payment");
+  const [checkout, setCheckout] = useState<CheckoutStarted | null>(resume ?? null);
   const [ticket, setTicket] = useState<TicketResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -75,6 +127,42 @@ export function BookingFlow({
   const [code, setCode] = useState("");
 
   const total = seatPrice * seats.length;
+
+  const digits = number.replace(/\D/g, "");
+  const brand = brandFor(digits);
+  const issuer = issuerFor(digits);
+  const expiryError = expiryProblem(expiry);
+  const numberHint =
+    digits.length >= 6 && !brand ? t("book.onlyVisaMc") : "4242 4242 4242 4242";
+
+  const canPay =
+    digits.length === 16 && !!brand && cvc.length === 3 && !expiryError &&
+    expiry.replace(/\D/g, "").length === 4 && holder.trim().length > 1;
+
+  useEffect(() => {
+    if (resume) return;                                  // the server already told us
+    const saved = sessionStorage.getItem(RESUME_KEY);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as CheckoutStarted;
+      if (new Date(parsed.expiresAtUtc) > new Date()) {
+        setCheckout(parsed);
+        setStep("code");
+      } else {
+        sessionStorage.removeItem(RESUME_KEY);
+      }
+    } catch {
+      sessionStorage.removeItem(RESUME_KEY);
+    }
+  }, [RESUME_KEY, resume]);
+
+  async function abandon() {
+    if (checkout) {
+      await post(`/api/bookings/${checkout.paymentId}/cancel`).catch(() => null);
+      sessionStorage.removeItem(RESUME_KEY);
+    }
+    onCancel();
+  }
 
   async function pay() {
     const [month, year] = expiry.split("/").map((part) => Number(part.trim()));
@@ -93,6 +181,7 @@ export function BookingFlow({
       });
       // Cleared the moment they are no longer needed.
       setNumber(""); setCvc(""); setExpiry("");
+      sessionStorage.setItem(RESUME_KEY, JSON.stringify(started));
       setCheckout(started);
       setStep("code");
     } catch (err) {
@@ -108,6 +197,7 @@ export function BookingFlow({
     setError(null);
     try {
       setTicket(await post<TicketResponse>(`/api/bookings/${checkout.paymentId}/confirm`, { code }));
+      sessionStorage.removeItem(RESUME_KEY);
       setStep("ticket");
       onBooked();
     } catch (err) {
@@ -151,7 +241,7 @@ export function BookingFlow({
           <Button disabled={busy || code.length !== 6} onClick={confirm}>
             {busy ? t("common.loading") : t("book.confirmSeats")}
           </Button>
-          <Button variant="outline" onClick={onCancel}>{t("common.cancel")}</Button>
+          <Button variant="outline" onClick={abandon}>{t("common.cancel")}</Button>
         </div>
       </Panel>
     );
@@ -171,18 +261,27 @@ export function BookingFlow({
       </div>
 
       <div className="mt-5 grid max-w-md gap-3">
-        <Field label={t("book.cardNumber")} hint="4242 4242 4242 4242">
-          <Input
-            value={number}
-            onChange={(e) => setNumber(groupDigits(e.target.value))}
-            inputMode="numeric"
-            autoComplete="cc-number"
-            placeholder="0000 0000 0000 0000"
-          />
+        <Field label={t("book.cardNumber")} hint={numberHint}>
+          <div className="relative">
+            <Input
+              value={number}
+              onChange={(e) => setNumber(groupDigits(e.target.value))}
+              inputMode="numeric"
+              autoComplete="cc-number"
+              placeholder="0000 0000 0000 0000"
+              className="pr-32"
+            />
+            {issuer || brand ? (
+              <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 gap-1">
+                {issuer ? <Badge tone="warn">{issuer}</Badge> : null}
+                {brand ? <Badge tone="good">{brand}</Badge> : null}
+              </span>
+            ) : null}
+          </div>
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t("book.expiry")} hint="MM/YY">
+          <Field label={t("book.expiry")} hint={expiryError ?? "MM/YY"}>
             <Input
               value={expiry}
               onChange={(e) => {
@@ -197,7 +296,7 @@ export function BookingFlow({
           <Field label={t("book.cvc")}>
             <Input
               value={cvc}
-              onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 3))}
               inputMode="numeric"
               autoComplete="cc-csc"
               placeholder="123"
@@ -214,27 +313,38 @@ export function BookingFlow({
       <div className="mt-3"><Notice tone="info">{t("book.simulated")}</Notice></div>
 
       <div className="mt-4 flex gap-2">
-        <Button disabled={busy || !number || !expiry || !cvc || !holder} onClick={pay}>
+        <Button disabled={busy || !canPay} onClick={pay}>
           {busy ? t("book.paying") : `${t("book.pay")} ${formatMoney(total)}`}
         </Button>
-        <Button variant="outline" onClick={onCancel}>{t("book.back")}</Button>
+        <Button variant="outline" onClick={abandon}>{t("book.back")}</Button>
       </div>
     </Panel>
   );
 }
 
-function TicketCard({ ticket, onDone }: { ticket: TicketResponse; onDone: () => void }) {
-  const [qr, setQr] = useState<string | null>(null);
+export function TicketCard({ ticket, onDone }: { ticket: TicketResponse; onDone?: () => void }) {
+  const [codes, setCodes] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    // Rendered locally: the payload is short, and generating it here means the ticket
-    // still draws if the network drops on the way to the cinema.
-    QRCode.toDataURL(ticket.qrPayload, {
-      width: 320,
-      margin: 1,
-      color: { dark: "#0A0C0A", light: "#FFFFFF" },
-    }).then(setQr).catch(() => setQr(null));
-  }, [ticket.qrPayload]);
+    // One code per seat, rendered locally: the payloads are short, and generating them here
+    // means the tickets still draw if the network drops on the way to the cinema.
+    let cancelled = false;
+
+    Promise.all(
+      ticket.seats.map(async (seat) => [
+        seat.label,
+        await QRCode.toDataURL(seat.qrPayload, {
+          width: 320,
+          margin: 1,
+          color: { dark: "#0A0C0A", light: "#FFFFFF" },
+        }),
+      ] as const),
+    )
+      .then((pairs) => { if (!cancelled) setCodes(Object.fromEntries(pairs)); })
+      .catch(() => { if (!cancelled) setCodes({}); });
+
+    return () => { cancelled = true; };
+  }, [ticket.seats]);
 
   return (
     <Panel>
@@ -243,44 +353,51 @@ function TicketCard({ ticket, onDone }: { ticket: TicketResponse; onDone: () => 
         {t("book.ticket")}
       </h3>
 
-      <div className="mt-4 grid gap-6 sm:grid-cols-[1fr_auto]">
-        <div>
-          <p className="font-display text-2xl text-ink">{ticket.movieTitle}</p>
-          <p className="mt-1 text-sm text-ink-mute">
-            {ticket.hall} · {formatWhen(ticket.startsAtUtc)}
-          </p>
-          <p className="mt-1 text-sm text-accent">
-            {languageName(ticket.audioLanguage)}
-            {ticket.subtitleLanguage ? ` · ${t("onDisplay.subtitles")}: ${languageName(ticket.subtitleLanguage)}` : ""}
-          </p>
+      <div className="mt-4">
+        <p className="font-display text-2xl text-ink">{ticket.movieTitle}</p>
+        <p className="mt-1 text-sm text-ink-mute">
+          {ticket.hall} · {formatWhen(ticket.startsAtUtc)}
+        </p>
+        <p className="mt-1 text-sm text-accent">
+          {languageName(ticket.audioLanguage)}
+          {ticket.subtitleLanguage ? ` · ${t("onDisplay.subtitles")}: ${languageName(ticket.subtitleLanguage)}` : ""}
+        </p>
 
-          <dl className="mt-4 space-y-1.5 text-sm">
-            <div className="flex gap-2">
-              <dt className="text-ink-mute">{t("book.reference")}:</dt>
-              <dd className="font-display tracking-widest text-accent">{ticket.reference}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="text-ink-mute">{t("book.seats")}:</dt>
-              <dd className="text-ink">{ticket.seats.map(seatLabel).join(", ")}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="text-ink-mute">{t("book.total")}:</dt>
-              <dd className="text-ink">{formatMoney(ticket.amount)} · {ticket.brand} ···· {ticket.last4}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="text-center">
-          {qr ? (
-            <img src={qr} alt={ticket.reference} className="mx-auto h-40 w-40 rounded-lg bg-white p-2" />
-          ) : (
-            <div className="mx-auto h-40 w-40 animate-pulse rounded-lg bg-line" />
-          )}
-          <p className="mt-2 max-w-[18ch] text-xs text-ink-mute">{t("book.showQr")}</p>
-        </div>
+        <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-sm">
+          <div className="flex gap-2">
+            <dt className="text-ink-mute">{t("book.reference")}:</dt>
+            <dd className="font-display tracking-widest text-accent">{ticket.reference}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="text-ink-mute">{t("book.total")}:</dt>
+            <dd className="text-ink">{formatMoney(ticket.amount)} · {ticket.brand} ···· {ticket.last4}</dd>
+          </div>
+        </dl>
       </div>
 
-      <Button className="mt-5" variant="outline" onClick={onDone}>{t("book.newBooking")}</Button>
+      {/* One card per seat, so two people arriving separately each have something to show. */}
+      <div className="mt-5 flex flex-wrap gap-4">
+        {ticket.seats.map((seat) => (
+          <div key={seat.label} className="rounded-xl border border-line p-3 text-center">
+            {codes[seat.label] ? (
+              <img
+                src={codes[seat.label]}
+                alt={`${ticket.reference} · ${seat.label}`}
+                className="h-36 w-36 rounded-lg bg-white p-2"
+              />
+            ) : (
+              <div className="h-36 w-36 animate-pulse rounded-lg bg-line" />
+            )}
+            <p className="mt-2 font-display text-lg text-ink">{seat.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-3 text-xs text-ink-mute">{t("book.showQr")}</p>
+
+      {onDone ? (
+        <Button className="mt-5" variant="outline" onClick={onDone}>{t("book.newBooking")}</Button>
+      ) : null}
     </Panel>
   );
 }
