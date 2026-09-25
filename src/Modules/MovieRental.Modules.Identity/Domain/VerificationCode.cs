@@ -5,6 +5,13 @@ namespace MovieRental.Modules.Identity.Domain;
 public enum VerificationChannel { Email = 1, Sms = 2 }
 
 /// <summary>
+/// What the code unlocks. Channel alone was not enough: without this, a code issued to
+/// confirm an e-mail address would also reset the password behind it, which turns a
+/// harmless "verify me" mail into an account takeover.
+/// </summary>
+public enum VerificationPurpose { AccountVerification = 1, PasswordReset = 2 }
+
+/// <summary>
 /// A one-time code. Only a salted hash is stored: a six-digit code is short enough that
 /// anyone reading the table would otherwise be able to use it directly.
 /// </summary>
@@ -16,6 +23,7 @@ public sealed class VerificationCode : BaseEntity
     public AppUser? User { get; set; }
 
     public VerificationChannel Channel { get; set; }
+    public VerificationPurpose Purpose { get; set; } = VerificationPurpose.AccountVerification;
     public required string CodeHash { get; set; }
     public required string Salt { get; set; }
 

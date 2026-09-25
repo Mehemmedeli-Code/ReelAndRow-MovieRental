@@ -67,6 +67,8 @@ public sealed class IdentityModule : IModule
         LoginEndpoint.Map(endpoints);
         RefreshTokenEndpoints.Map(endpoints);
         VerificationEndpoints.Map(endpoints);
+        ForgotPasswordEndpoints.Map(endpoints);
+        ManageUsersEndpoints.Map(endpoints);
         CurrentUserProfileEndpoint.Map(endpoints);
     }
 }

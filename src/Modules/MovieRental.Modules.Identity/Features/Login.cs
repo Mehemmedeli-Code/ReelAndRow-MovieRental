@@ -2,12 +2,14 @@ using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using MovieRental.Modules.Identity.Infrastructure;
 using MovieRental.Modules.Identity.Persistence;
 using MovieRental.SharedKernel.Cqrs;
 using MovieRental.SharedKernel.Results;
+using MovieRental.SharedKernel.Security;
 
 namespace MovieRental.Modules.Identity.Features;
 
@@ -38,6 +40,12 @@ internal sealed class LoginHandler(
 
         // Distinct code so the client can send them to the confirm screen instead of
         // leaving them staring at a rejected password they typed correctly.
+        if (user.IsSuspended)
+            return Result.Failure<AuthResponse>(new Error("account_suspended",
+                user.SuspensionReason is { Length: > 0 } reason
+                    ? $"This account is suspended: {reason}"
+                    : "This account is suspended. Contact support."));
+
         if (!user.IsEmailConfirmed)
             return Result.Failure<AuthResponse>(new Error("email_unconfirmed",
                 "Confirm your e-mail address before signing in."));
@@ -64,11 +72,15 @@ public static class LoginEndpoint
                 var result = await dispatcher.Send(command, ct);
                 if (result.IsSuccess) return TypedResults.Ok(result.Value);
 
-                return result.Error.Code == "email_unconfirmed"
+                // Distinct codes so the client can route: one to the confirm screen, one to
+                // a plain explanation. Anything else stays a bare 401 to avoid telling an
+                // attacker which half of the pair was wrong.
+                return result.Error.Code is "email_unconfirmed" or "account_suspended"
                     ? TypedResults.BadRequest(result.Error)
                     : TypedResults.Unauthorized();
             })
         .WithName("Login")
         .WithTags("Auth")
-        .AllowAnonymous();
+        .AllowAnonymous()
+        .RequireRateLimiting(AppPolicies.AuthRateLimit);
 }

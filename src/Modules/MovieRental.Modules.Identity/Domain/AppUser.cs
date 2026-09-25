@@ -12,6 +12,12 @@ public sealed class AppUser : BaseEntity, ISoftDeletable
     public bool IsPhoneConfirmed { get; set; }
     public DateTime? LastLoginAtUtc { get; set; }
 
+    /// <summary>Suspension rather than deletion: the rentals, reviews and bookings behind an
+    /// account still have to make sense after the person is barred.</summary>
+    public bool IsSuspended { get; set; }
+    public DateTime? SuspendedAtUtc { get; set; }
+    public string? SuspensionReason { get; set; }
+
     /// <summary>Comma separated role list. A join table would be over-engineering for a
     /// two-role system; promote it to its own entity the day roles gain metadata.</summary>
     public string Roles { get; set; } = SharedKernel.Security.AppRoles.Customer;

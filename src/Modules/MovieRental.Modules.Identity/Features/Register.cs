@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -63,7 +64,8 @@ internal sealed class RegisterHandler(
         // for another code from the confirm screen rather than registering all over again.
         try
         {
-            var issued = await verification.IssueAsync(user, VerificationChannel.Email, ct);
+            var issued = await verification.IssueAsync(
+                user, VerificationChannel.Email, VerificationPurpose.AccountVerification, ct);
             if (issued.IsFailure) throw new InvalidOperationException(issued.Error.Message);
         }
         catch (Exception ex)
@@ -92,7 +94,8 @@ public static class RegisterEndpoint
             })
         .WithName("Register")
         .WithTags("Auth")
-        .AllowAnonymous();
+        .AllowAnonymous()
+        .RequireRateLimiting(AppPolicies.AuthRateLimit);
 }
 
 internal static class UserProfileMapper
