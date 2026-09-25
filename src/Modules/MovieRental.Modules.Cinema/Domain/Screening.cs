@@ -6,6 +6,12 @@ public sealed class Screening : BaseEntity, ISoftDeletable
 {
     public Guid MovieId { get; set; }
     public required string MovieTitle { get; set; }
+    /// <summary>The room this performance plays in. Rows and SeatsPerRow below are copied
+    /// from it when the screening is created, so re-fitting a hall later never silently
+    /// invalidates seats already sold.</summary>
+    public Guid HallId { get; set; }
+    public Hall? HallRoom { get; set; }
+
     public required string Hall { get; set; }
     public DateTime StartsAtUtc { get; set; }
     public int Rows { get; set; } = 8;

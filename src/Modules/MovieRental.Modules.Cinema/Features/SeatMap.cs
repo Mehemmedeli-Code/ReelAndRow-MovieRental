@@ -14,14 +14,16 @@ namespace MovieRental.Modules.Cinema.Features;
 public sealed record ScreeningListItem(
     Guid Id, Guid MovieId, string MovieTitle, string Hall, DateTime StartsAtUtc,
     decimal SeatPrice, int Capacity, int SeatsTaken,
-    string AudioLanguage, string? SubtitleLanguage);
+    string AudioLanguage, string? SubtitleLanguage,
+    Guid HallId, string VenueName);
 
 public sealed record SeatState(int Row, int Number, bool IsTaken, bool IsMine, bool IsHeld);
 
 public sealed record SeatMapResponse(
     Guid ScreeningId, string MovieTitle, string Hall, DateTime StartsAtUtc,
     int Rows, int SeatsPerRow, decimal SeatPrice,
-    string AudioLanguage, string? SubtitleLanguage, IReadOnlyList<SeatState> Seats);
+    string AudioLanguage, string? SubtitleLanguage,
+    Guid HallId, string VenueName, IReadOnlyList<SeatState> Seats);
 
 public sealed record GetScreeningsQuery : IQuery<IReadOnlyList<ScreeningListItem>>;
 
@@ -34,7 +36,8 @@ internal sealed class GetScreeningsHandler(CinemaDbContext db)
             .OrderBy(s => s.StartsAtUtc)
             .Select(s => new ScreeningListItem(
                 s.Id, s.MovieId, s.MovieTitle, s.Hall, s.StartsAtUtc, s.SeatPrice,
-                s.Rows * s.SeatsPerRow, s.Bookings.Count, s.AudioLanguage, s.SubtitleLanguage))
+                s.Rows * s.SeatsPerRow, s.Bookings.Count, s.AudioLanguage, s.SubtitleLanguage,
+                s.HallId, s.HallRoom!.Venue!.Name))
             .ToListAsync(ct);
 }
 
@@ -45,7 +48,8 @@ internal sealed class GetSeatMapHandler(CinemaDbContext db, ICurrentUser current
 {
     public async Task<SeatMapResponse?> Handle(GetSeatMapQuery query, CancellationToken ct)
     {
-        var screening = await db.Screenings.AsNoTracking()
+        var screening = await db.Screenings
+            .Include(s => s.HallRoom!).ThenInclude(h => h.Venue).AsNoTracking()
             .Include(s => s.Bookings)
             .FirstOrDefaultAsync(s => s.Id == query.ScreeningId, ct);
 
@@ -81,7 +85,8 @@ internal sealed class GetSeatMapHandler(CinemaDbContext db, ICurrentUser current
 
         return new SeatMapResponse(screening.Id, screening.MovieTitle, screening.Hall,
             screening.StartsAtUtc, screening.Rows, screening.SeatsPerRow, screening.SeatPrice,
-            screening.AudioLanguage, screening.SubtitleLanguage, seats);
+            screening.AudioLanguage, screening.SubtitleLanguage,
+            screening.HallId, screening.HallRoom?.Venue?.Name ?? "", seats);
     }
 }
 

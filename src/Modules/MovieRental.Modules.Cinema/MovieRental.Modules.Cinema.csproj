@@ -9,4 +9,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\MovieRental.SharedKernel\MovieRental.SharedKernel.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The tests exercise internal helpers (card checks, code hashing). Exposing them to
+         one named assembly keeps them internal to everyone else. -->
+    <InternalsVisibleTo Include="MovieRental.Tests" />
+  </ItemGroup>
+
 </Project>
