@@ -26,4 +26,9 @@ public static class AppPolicies
     /// <summary>Security reviewers plus admins. Named separately from the roles so the
     /// "admin can see everything" rule lives in one place instead of every endpoint.</summary>
     public const string SecurityDesk = "SecurityDesk";
+
+    /// <summary>Rate-limit policy names. Declared here, configured by the host, requested by
+    /// the slices that need them — guessing attacks are aimed at endpoints, not at modules.</summary>
+    public const string AuthRateLimit = "auth";
+    public const string CodeRateLimit = "codes";
 }

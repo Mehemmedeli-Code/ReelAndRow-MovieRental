@@ -47,7 +47,8 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
             e.Property(x => x.CodeHash).HasMaxLength(128).IsRequired();
             e.Property(x => x.Salt).HasMaxLength(64).IsRequired();
             e.Property(x => x.Channel).HasConversion<int>();
-            e.HasIndex(x => new { x.UserId, x.Channel, x.SentAtUtc });
+            e.Property(x => x.Purpose).HasConversion<int>();
+            e.HasIndex(x => new { x.UserId, x.Purpose, x.Channel, x.SentAtUtc });
         });
 
         base.OnModelCreating(b);

@@ -11,9 +11,9 @@ namespace MovieRental.Modules.Cinema.Infrastructure;
 /// Sweeps up checkouts that were never confirmed.
 ///
 /// Without this, an abandoned payment blocks its seats until somebody else happens to start
-/// a checkout on the same screening — which might be never. Rows are deleted rather than
-/// soft-deleted: the unique index on (screening, row, number) counts filtered rows, so a
-/// lingering one would keep the seat off sale permanently.
+/// a checkout on the same screening — which might be never. Removing a booking soft-deletes
+/// it, and the unique index on (screening, row, number) is filtered to [IsDeleted] = 0, so
+/// the row leaves the constraint and the seat goes back on sale while the history survives.
 /// </summary>
 internal sealed class HoldExpiryService(IServiceScopeFactory scopes, ILogger<HoldExpiryService> logger)
     : BackgroundService

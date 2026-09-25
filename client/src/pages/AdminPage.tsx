@@ -9,6 +9,7 @@ import { get, post, put, patch, del, query, ApiError, type Paged } from "@/lib/a
 import { formatDate, formatMoney } from "@/lib/format";
 import { t, languageName } from "@/lib/i18n";
 import { VideoPlayer } from "@/components/VideoPlayer";
+import { UserAdmin } from "@/components/UserAdmin";
 import { statusTone, type ShortFilmDetail } from "@/lib/shorts";
 import type { MovieListItem } from "@/components/MovieCard";
 
@@ -20,10 +21,19 @@ interface RentalStats {
   revenueThisMonth: number;
 }
 
+interface Venue {
+  id: string;
+  name: string;
+  city: string;
+  halls: { id: string; name: string; format?: string | null; rows: number; seatsPerRow: number }[];
+}
+
 interface Screening {
   id: string;
   movieId: string;
   movieTitle: string;
+  hallId: string;
+  venueName: string;
   hall: string;
   startsAtUtc: string;
   rows: number;
@@ -55,6 +65,7 @@ export default function AdminPage() {
   const [movies, setMovies] = useState<Paged<MovieListItem> | null>(null);
   const [shorts, setShorts] = useState<ShortFilmDetail[]>([]);
   const [screenings, setScreenings] = useState<Screening[]>([]);
+  const [venues, setVenues] = useState<Venue[]>([]);
   const [showDeleted, setShowDeleted] = useState(false);
   const [draft, setDraft] = useState(BLANK);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -64,18 +75,20 @@ export default function AdminPage() {
     if (!isAdmin) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [statsData, chartData, movieData, shortData, screeningData] = await Promise.all([
+      const [statsData, chartData, movieData, shortData, screeningData, venueData] = await Promise.all([
         get<RentalStats>("/api/admin/rentals/stats"),
         get<ChartSeries[]>("/api/admin/analytics/overview"),
         get<Paged<MovieListItem>>("/api/movies" + query({ includeDeleted: showDeleted, pageSize: 24, sortBy: "title" })),
         get<ShortFilmDetail[]>("/api/admin/shorts/queue"),
         get<Screening[]>("/api/admin/screenings"),
+        get<Venue[]>("/api/venues"),
       ]);
       setStats(statsData);
       setCharts(chartData);
       setMovies(movieData);
       setShorts(shortData);
       setScreenings(screeningData);
+      setVenues(venueData);
     } catch (err) {
       setMessage({ tone: "error", text: err instanceof ApiError ? err.message : t("error.dashboard") });
     } finally {
@@ -247,6 +260,10 @@ export default function AdminPage() {
         )}
       </Section>
 
+      <Section title={t("admin.users")} lede={t("admin.usersLede")}>
+        <UserAdmin />
+      </Section>
+
       <Section
         title={t("admin.screenings")}
         lede={t("admin.screeningsLede")}
@@ -268,7 +285,7 @@ export default function AdminPage() {
                     <td className="px-4 py-3">
                       <p className="text-ink">{screening.movieTitle}</p>
                       <p className="text-xs text-ink-mute">
-                        {screening.hall} · {formatDate(screening.startsAtUtc)}
+                        {screening.venueName} · {screening.hall} · {formatDate(screening.startsAtUtc)}
                       </p>
                     </td>
                     <td className="px-4 py-3">
@@ -297,6 +314,7 @@ export default function AdminPage() {
 
           <NewScreeningForm
             movies={movies?.items ?? []}
+            venues={venues}
             onSaved={() => run(async () => undefined, "Screening scheduled.")}
           />
         </div>
@@ -411,13 +429,15 @@ function ShortDecisionCard({
 /** Screenings are what Movies on Display reads, so this is where that page gets its content. */
 function NewScreeningForm({
   movies,
+  venues,
   onSaved,
 }: {
   movies: MovieListItem[];
+  venues: Venue[];
   onSaved: () => Promise<void> | void;
 }) {
   const [movieId, setMovieId] = useState("");
-  const [hall, setHall] = useState("Hall A");
+  const [hallId, setHallId] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [audio, setAudio] = useState("az");
   const [subtitles, setSubtitles] = useState("");
@@ -431,10 +451,8 @@ function NewScreeningForm({
     try {
       await post("/api/admin/screenings", {
         movieId,
-        hall,
+        hallId,
         startsAtUtc: new Date(startsAt).toISOString(),
-        rows: 8,
-        seatsPerRow: 12,
         seatPrice: price,
         audioLanguage: audio,
         subtitleLanguage: subtitles || null,
@@ -461,7 +479,20 @@ function NewScreeningForm({
           </Select>
         </Field>
 
-        <Field label={t("admin.hall")}><Input value={hall} onChange={(e) => setHall(e.target.value)} /></Field>
+        <Field label={t("admin.hall")} hint={t("admin.hallHint")}>
+          <Select value={hallId} onChange={(e) => setHallId(e.target.value)}>
+            <option value="">—</option>
+            {venues.map((venue) => (
+              <optgroup key={venue.id} label={venue.name}>
+                {venue.halls.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name}{h.format ? ` · ${h.format}` : ""} · {h.rows * h.seatsPerRow}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </Select>
+        </Field>
 
         <Field label={t("admin.startsAt")}>
           <Input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
@@ -491,7 +522,7 @@ function NewScreeningForm({
 
         {error ? <Notice tone="error">{error}</Notice> : null}
 
-        <Button className="w-full" disabled={!movieId || !startsAt || busy} onClick={save}>
+        <Button className="w-full" disabled={!movieId || !hallId || !startsAt || busy} onClick={save}>
           {busy ? t("common.loading") : t("common.save")}
         </Button>
       </div>

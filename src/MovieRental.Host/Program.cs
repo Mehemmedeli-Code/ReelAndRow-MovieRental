@@ -1,4 +1,7 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -106,6 +109,47 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(AppRoles.Customer, policy => policy.RequireAuthenticatedUser());
 
 // ---------------------------------------------------------------------------
+// Rate limiting
+//
+// A six-digit code is a million guesses. Five attempts burn the code, but nothing stopped
+// somebody requesting a fresh one and starting again, so the attempt counter alone was not
+// a defence. These limits are per client address and apply to the endpoints where guessing
+// is the attack: signing in, and anything that takes a code.
+// ---------------------------------------------------------------------------
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.OnRejected = async (context, ct) =>
+    {
+        // Say how long to wait rather than leaving the caller to guess. A legitimate user
+        // who mistyped their password twice deserves a straight answer.
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)retryAfter.TotalSeconds).ToString(CultureInfo.InvariantCulture);
+
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsync(
+            """{"code":"too_many_requests","message":"Too many attempts. Wait a minute and try again."}""", ct);
+    };
+
+    options.AddPolicy(AppPolicies.AuthRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(
+        ClientKey(http),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 8, Window = TimeSpan.FromMinutes(1) }));
+
+    options.AddPolicy(AppPolicies.CodeRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(
+        ClientKey(http),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 12, Window = TimeSpan.FromMinutes(5) }));
+
+    // Behind a proxy the socket address is the proxy's, so the forwarded header is used when
+    // present. Configure ForwardedHeaders before trusting it in production.
+    static string ClientKey(HttpContext http) =>
+        http.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+        ?? http.Connection.RemoteIpAddress?.ToString()
+        ?? "unknown";
+});
+
+// ---------------------------------------------------------------------------
 // Presentation
 // ---------------------------------------------------------------------------
 builder.Services.AddRazorPages();
@@ -160,6 +204,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 ApiReference.Map(app);
 

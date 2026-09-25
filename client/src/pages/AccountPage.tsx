@@ -7,7 +7,7 @@ import { useAuth } from "@/components/useAuth";
 import { auth, post, ApiError, type AuthResponse, type RegistrationResponse } from "@/lib/api";
 import { t } from "@/lib/i18n";
 
-type Mode = "signin" | "register" | "verify";
+type Mode = "signin" | "register" | "verify" | "forgot" | "reset";
 
 export default function AccountPage() {
   const { user, isSignedIn, signOut } = useAuth();
@@ -48,6 +48,9 @@ export default function AccountPage() {
         setMode("verify");
         setMessage({ tone: "info", text: t("account.verifyLede") });
       }
+      if (api?.code === "account_suspended") {
+        setMessage({ tone: "error", text: api.message || t("error.suspended") });
+      }
     } finally {
       setBusy(false);
     }
@@ -74,6 +77,35 @@ export default function AccountPage() {
       setMode("signin");
       setCode("");
       setMessage({ tone: "ok", text: "E-mail confirmed. You can sign in now." });
+    } catch (err) {
+      fail(err, "That code was not accepted.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function requestReset() {
+    setBusy(true); setMessage(null);
+    try {
+      await post("/api/auth/password/forgot", { email });
+      setMode("reset");
+      // Deliberately vague: a definite "no such account" would turn this form into a way
+      // of discovering who has one.
+      setMessage({ tone: "ok", text: t("account.resetSent") });
+    } catch (err) {
+      fail(err, "The code could not be sent.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetPassword() {
+    setBusy(true); setMessage(null); setFieldErrors({});
+    try {
+      await post("/api/auth/password/reset", { email, code, newPassword: password });
+      setMode("signin");
+      setCode(""); setPassword("");
+      setMessage({ tone: "ok", text: t("account.resetDone") });
     } catch (err) {
       fail(err, "That code was not accepted.");
     } finally {
@@ -156,12 +188,70 @@ export default function AccountPage() {
   }
 
   return (
-    <Section title={mode === "register" ? t("account.register") : mode === "verify" ? t("account.verify") : t("account.signIn")}
-             lede={mode === "verify" ? t("account.verifyLede") : undefined}>
+    <Section
+      title={
+        mode === "register" ? t("account.register")
+        : mode === "verify" ? t("account.verify")
+        : mode === "forgot" || mode === "reset" ? t("account.resetTitle")
+        : t("account.signIn")
+      }
+      lede={
+        mode === "verify" ? t("account.verifyLede")
+        : mode === "forgot" ? t("account.resetLede")
+        : undefined
+      }
+    >
       <Panel className="max-w-md">
         {message ? <div className="mb-4"><Notice tone={message.tone === "info" ? "info" : message.tone}>{message.text}</Notice></div> : null}
 
-        {mode === "verify" ? (
+        {mode === "forgot" || mode === "reset" ? (
+          <div className="space-y-4">
+            <Field label={t("account.email")}>
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
+            </Field>
+
+            {mode === "reset" ? (
+              <>
+                <Field label={t("account.code")}>
+                  <Input
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="000000"
+                  />
+                </Field>
+                <Field label={t("account.newPassword")} hint={fieldErrors.NewPassword?.[0]}>
+                  <Input
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    type="password"
+                    autoComplete="new-password"
+                  />
+                </Field>
+              </>
+            ) : null}
+
+            <Button
+              className="w-full"
+              disabled={busy || !email || (mode === "reset" && (code.length !== 6 || password.length < 8))}
+              onClick={mode === "reset" ? resetPassword : requestReset}
+            >
+              {busy ? t("common.loading") : mode === "reset" ? t("account.setPassword") : t("account.sendCode")}
+            </Button>
+
+            <div className="flex justify-between text-sm">
+              {mode === "reset" ? (
+                <button className="text-accent hover:underline" onClick={requestReset} disabled={busy}>
+                  {t("account.resend")}
+                </button>
+              ) : <span />}
+              <button className="text-ink-mute hover:underline" onClick={() => { setMode("signin"); setMessage(null); }}>
+                {t("account.signIn")}
+              </button>
+            </div>
+          </div>
+        ) : mode === "verify" ? (
           <div className="space-y-4">
             <Field label={t("account.email")}>
               <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
@@ -226,6 +316,15 @@ export default function AccountPage() {
             >
               {mode === "register" ? t("account.signIn") : t("account.register")}
             </button>
+
+            {mode === "signin" ? (
+              <button
+                className="w-full text-sm text-accent hover:underline"
+                onClick={() => { setMode("forgot"); setMessage(null); setFieldErrors({}); }}
+              >
+                {t("account.forgot")}
+              </button>
+            ) : null}
           </div>
         )}
       </Panel>

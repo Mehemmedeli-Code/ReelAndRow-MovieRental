@@ -9,8 +9,12 @@ namespace MovieRental.Modules.Identity.Infrastructure;
 
 public interface IVerificationService
 {
-    Task<Result> IssueAsync(AppUser user, VerificationChannel channel, CancellationToken ct);
-    Task<Result> ConfirmAsync(AppUser user, VerificationChannel channel, string code, CancellationToken ct);
+    Task<Result> IssueAsync(AppUser user, VerificationChannel channel, VerificationPurpose purpose, CancellationToken ct);
+
+    /// <summary>Checks the code and consumes it, but applies no side effect of its own —
+    /// the caller decides what confirming means.</summary>
+    Task<Result> CheckAsync(AppUser user, VerificationChannel channel, VerificationPurpose purpose,
+        string code, CancellationToken ct);
 }
 
 internal sealed class VerificationService(
@@ -19,13 +23,14 @@ internal sealed class VerificationService(
 {
     private static readonly TimeSpan ResendCooldown = TimeSpan.FromSeconds(60);
 
-    public async Task<Result> IssueAsync(AppUser user, VerificationChannel channel, CancellationToken ct)
+    public async Task<Result> IssueAsync(AppUser user, VerificationChannel channel,
+        VerificationPurpose purpose, CancellationToken ct)
     {
         if (channel == VerificationChannel.Sms && string.IsNullOrWhiteSpace(user.PhoneNumber))
             return Result.Failure(Error.Validation("Add a phone number to your profile first."));
 
         var last = await db.VerificationCodes
-            .Where(c => c.UserId == user.Id && c.Channel == channel)
+            .Where(c => c.UserId == user.Id && c.Channel == channel && c.Purpose == purpose)
             .OrderByDescending(c => c.SentAtUtc)
             .FirstOrDefaultAsync(ct);
 
@@ -37,7 +42,8 @@ internal sealed class VerificationService(
 
         // Any earlier code for this channel stops working the moment a new one is issued.
         var live = await db.VerificationCodes
-            .Where(c => c.UserId == user.Id && c.Channel == channel && c.ConsumedAtUtc == null)
+            .Where(c => c.UserId == user.Id && c.Channel == channel && c.Purpose == purpose
+                     && c.ConsumedAtUtc == null)
             .ToListAsync(ct);
         foreach (var old in live) old.ConsumedAtUtc = DateTime.UtcNow;
 
@@ -49,6 +55,7 @@ internal sealed class VerificationService(
         {
             UserId = user.Id,
             Channel = channel,
+            Purpose = purpose,
             CodeHash = hash,
             Salt = salt,
             SentAtUtc = DateTime.UtcNow,
@@ -58,6 +65,8 @@ internal sealed class VerificationService(
 
         // Sent after the save: a code the user holds but the database has not seen is worse
         // than a code stored but not delivered, which they can simply request again.
+        var resetting = purpose == VerificationPurpose.PasswordReset;
+
         if (channel == VerificationChannel.Sms)
         {
             await sms.SendAsync(new SmsRequest(user.PhoneNumber!,
@@ -65,22 +74,33 @@ internal sealed class VerificationService(
         }
         else
         {
-            await email.SendAsync(new EmailRequest(user.Email, "Your WatchingYou verification code",
+            var subject = resetting ? "Reset your WatchingYou password" : "Your WatchingYou verification code";
+            var lead = resetting
+                ? "Use this code to set a new password:"
+                : "Your verification code is:";
+            var warning = resetting
+                ? "<p>If you did not ask to reset your password, ignore this message — nothing has changed, and your current password still works.</p>"
+                : "<p>If you did not ask for this, ignore the message.</p>";
+
+            await email.SendAsync(new EmailRequest(user.Email, subject,
                 $"""
                  <p>Hi {user.FullName},</p>
-                 <p>Your verification code is <strong style="font-size:20px;letter-spacing:3px">{code}</strong></p>
+                 <p>{lead}</p>
+                 <p style="font-size:20px;letter-spacing:3px"><strong>{code}</strong></p>
                  <p>It expires in {minutes} minutes and can be used once.</p>
-                 <p>If you did not ask for this, ignore the message.</p>
+                 {warning}
                  """), ct);
         }
 
         return Result.Success();
     }
 
-    public async Task<Result> ConfirmAsync(AppUser user, VerificationChannel channel, string code, CancellationToken ct)
+    public async Task<Result> CheckAsync(AppUser user, VerificationChannel channel,
+        VerificationPurpose purpose, string code, CancellationToken ct)
     {
         var pending = await db.VerificationCodes
-            .Where(c => c.UserId == user.Id && c.Channel == channel && c.ConsumedAtUtc == null)
+            .Where(c => c.UserId == user.Id && c.Channel == channel && c.Purpose == purpose
+                     && c.ConsumedAtUtc == null)
             .OrderByDescending(c => c.SentAtUtc)
             .FirstOrDefaultAsync(ct);
 
@@ -96,9 +116,6 @@ internal sealed class VerificationService(
                 ? Error.Validation("Too many wrong attempts. Request a new code.")
                 : Error.Validation($"Incorrect code. {pending.AttemptsLeft} attempts left."));
         }
-
-        if (channel == VerificationChannel.Email) user.IsEmailConfirmed = true;
-        else user.IsPhoneConfirmed = true;
 
         pending.ConsumedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);

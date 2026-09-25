@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using MovieRental.Modules.Identity.Domain;
@@ -8,6 +9,7 @@ using MovieRental.Modules.Identity.Infrastructure;
 using MovieRental.Modules.Identity.Persistence;
 using MovieRental.SharedKernel.Cqrs;
 using MovieRental.SharedKernel.Results;
+using MovieRental.SharedKernel.Security;
 
 namespace MovieRental.Modules.Identity.Features;
 
@@ -34,7 +36,8 @@ internal sealed class SendVerificationHandler(IdentityDbContext db, IVerificatio
         if (command.Channel == VerificationChannel.Email && user.IsEmailConfirmed)
             return Result.Failure(Error.Conflict("This e-mail is already confirmed."));
 
-        return await verification.IssueAsync(user, command.Channel, ct);
+        return await verification.IssueAsync(
+            user, command.Channel, VerificationPurpose.AccountVerification, ct);
     }
 }
 
@@ -51,7 +54,17 @@ internal sealed class ConfirmCodeHandler(IdentityDbContext db, IVerificationServ
         if (user is null)
             return Result.Failure(Error.Validation("That code has expired or been used up. Ask for a new one."));
 
-        return await verification.ConfirmAsync(user, command.Channel, command.Code, ct);
+        var checkResult = await verification.CheckAsync(
+            user, command.Channel, VerificationPurpose.AccountVerification, command.Code, ct);
+        if (checkResult.IsFailure) return checkResult;
+
+        // Marking the address confirmed is this slice's job, not the code checker's — the
+        // same check also guards password resets, which must not confirm anything.
+        if (command.Channel == VerificationChannel.Email) user.IsEmailConfirmed = true;
+        else user.IsPhoneConfirmed = true;
+
+        await db.SaveChangesAsync(ct);
+        return Result.Success();
     }
 }
 
@@ -69,7 +82,8 @@ public static class VerificationEndpoints
                     ? TypedResults.Conflict(result.Error)
                     : TypedResults.BadRequest(result.Error);
             })
-        .WithName("SendVerification").WithTags("Auth").AllowAnonymous();
+        .WithName("SendVerification").WithTags("Auth").AllowAnonymous()
+        .RequireRateLimiting(AppPolicies.CodeRateLimit);
 
         app.MapPost("/api/auth/verification/confirm",
             async Task<Results<NoContent, BadRequest<Error>>> (
@@ -78,6 +92,7 @@ public static class VerificationEndpoints
                 var result = await dispatcher.Send(command, ct);
                 return result.IsSuccess ? TypedResults.NoContent() : TypedResults.BadRequest(result.Error);
             })
-        .WithName("ConfirmVerificationCode").WithTags("Auth").AllowAnonymous();
+        .WithName("ConfirmVerificationCode").WithTags("Auth").AllowAnonymous()
+        .RequireRateLimiting(AppPolicies.CodeRateLimit);
     }
 }

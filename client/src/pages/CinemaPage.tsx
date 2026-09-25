@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { Section, Panel, Notice, Spinner, Empty } from "@/components/Shell";
 import { BookingFlow, TicketCard, type SeatSelection, type TicketResponse, type CheckoutStarted } from "@/components/BookingFlow";
 import { post } from "@/lib/api";
+import { HallPreview, type PreviewSeat } from "@/components/HallPreview";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/useAuth";
 import { get } from "@/lib/api";
@@ -19,6 +20,8 @@ interface Screening {
   seatsTaken: number;
   audioLanguage: string;
   subtitleLanguage?: string | null;
+  hallId: string;
+  venueName: string;
 }
 
 interface PendingCheckout {
@@ -52,6 +55,8 @@ interface SeatMap {
   seatPrice: number;
   audioLanguage: string;
   subtitleLanguage?: string | null;
+  hallId: string;
+  venueName: string;
   seats: SeatState[];
 }
 
@@ -82,6 +87,7 @@ export default function CinemaPage() {
   const [tickets, setTickets] = useState<TicketResponse[]>([]);
   const [pending, setPending] = useState<PendingCheckout[]>([]);
   const [resuming, setResuming] = useState<PendingCheckout | null>(null);
+  const [preview, setPreview] = useState<PreviewSeat[] | null>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -172,6 +178,10 @@ export default function CinemaPage() {
 
   return (
     <Section title={t("cinema.title")} lede={t("cinema.lede")}>
+      {preview && map ? (
+        <HallPreview hallId={map.hallId} seats={preview} onClose={() => setPreview(null)} />
+      ) : null}
+
       {pending.length > 0 && !resuming ? (
         <div className="mb-6 space-y-2">
           {pending.map((checkout) => (
@@ -233,7 +243,7 @@ export default function CinemaPage() {
                 >
                   <p className="font-display text-base text-ink">{screening.movieTitle}</p>
                   <p className="mt-1 text-xs text-ink-mute">
-                    {screening.hall} · {formatDateTime(screening.startsAtUtc)}
+                    {screening.venueName} · {screening.hall} · {formatDateTime(screening.startsAtUtc)}
                   </p>
                   <p className="mt-1 text-xs text-ink-mute">
                     {languageName(screening.audioLanguage)}
@@ -257,7 +267,7 @@ export default function CinemaPage() {
                 <div className="mb-6">
                   <h3 className="font-display text-2xl text-ink">{map.movieTitle}</h3>
                   <p className="text-sm text-ink-mute">
-                    {map.hall} · {formatDateTime(map.startsAtUtc)} · {formatMoney(map.seatPrice)} a seat
+                    {map.venueName} · {map.hall} · {formatDateTime(map.startsAtUtc)} · {formatMoney(map.seatPrice)} a seat
                   </p>
                   <p className="mt-1 text-sm text-accent">
                     {languageName(map.audioLanguage)}
@@ -352,9 +362,28 @@ export default function CinemaPage() {
                           ? t("cinema.noSeats")
                           : `${picked.size} · ${formatMoney(total)}`}
                       </p>
-                      <Button disabled={picked.size === 0} onClick={startCheckout}>
-                        {isSignedIn ? t("book.confirmSeats") : t("cinema.signInToBook")}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          disabled={picked.size === 0}
+                          onClick={() => {
+                            // Every seat picked, in reading order, so the arrows step through
+                            // them the way they sit in the row.
+                            const chosen = [...picked]
+                              .map((key) => {
+                                const [row, seat] = key.split(":").map(Number);
+                                return { row, seat };
+                              })
+                              .sort((a, b) => a.row - b.row || a.seat - b.seat);
+                            if (chosen.length > 0) setPreview(chosen);
+                          }}
+                        >
+                          {t("view.seeFromHere")}
+                        </Button>
+                        <Button disabled={picked.size === 0} onClick={startCheckout}>
+                          {isSignedIn ? t("book.confirmSeats") : t("cinema.signInToBook")}
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>

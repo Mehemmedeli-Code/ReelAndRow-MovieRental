@@ -29,7 +29,7 @@ public static class DevelopmentDatabaseBootstrapper
     /// a schema that is present but out of date — which fails later, at query time, with a
     /// far less obvious error. Production uses real migrations and never reads this.
     /// </summary>
-    private const string SchemaStamp = "2026-09-13-seat-payments-clean";
+    private const string SchemaStamp = "2026-09-14-venues-and-halls";
 
     public static async Task InitialiseAsync(IServiceProvider services, CancellationToken ct = default)
     {
@@ -189,28 +189,83 @@ public static class DevelopmentDatabaseBootstrapper
         var cinema = services.GetRequiredService<CinemaDbContext>();
         if (!await cinema.Screenings.AnyAsync(ct))
         {
+            // Four cinemas, four rooms each. The rooms differ on purpose: a preview that
+            // showed the same box everywhere would be decoration rather than information.
+            var venues = new[]
+            {
+                ("Nizami", "Baku", "28 May küç. 1"),
+                ("28 Mall", "Baku", "Azadlıq pr. 15"),
+                ("Ganjlik Mall", "Baku", "Fatali Khan Khoyski 14"),
+                ("Metropark", "Baku", "Babek pr. 96"),
+            };
+
+            var layouts = new (string Name, string Format, int Rows, int Cols, double Width,
+                               double Depth, double Height, double Screen, double ScreenH,
+                               double Curve, double FirstRow, double Pitch, double Rise)[]
+            {
+                ("A100", "Dolby Atmos", 8, 6, 16, 24, 8.4, 9.6, 4.2, 17, 7.4, 1.10, 0.42),
+                ("B100", "Standart",    7, 5, 13, 20, 7.2, 7.8, 3.4, 22, 6.2, 1.05, 0.38),
+                ("C100", "IMAX",       10, 8, 22, 30, 11.0, 15.0, 7.0, 26, 8.6, 1.20, 0.50),
+                ("D100", "VIP recliner", 5, 4, 11, 16, 6.6, 6.6, 2.9, 40, 5.4, 1.40, 0.55),
+            };
+
+            var halls = new List<Hall>();
+
+            foreach (var (name, city, address) in venues)
+            {
+                var venue = new Venue { Name = name, City = city, Address = address };
+                foreach (var layout in layouts)
+                {
+                    var hall = new Hall
+                    {
+                        Name = layout.Name,
+                        Format = layout.Format,
+                        Rows = layout.Rows,
+                        SeatsPerRow = layout.Cols * 2,
+                        BlockColumns = layout.Cols,
+                        RoomWidth = layout.Width,
+                        RoomDepth = layout.Depth,
+                        RoomHeight = layout.Height,
+                        ScreenWidth = layout.Screen,
+                        ScreenHeight = layout.ScreenH,
+                        ScreenCurveRadius = layout.Curve,
+                        FirstRowDistance = layout.FirstRow,
+                        RowPitch = layout.Pitch,
+                        RowRise = layout.Rise
+                    };
+                    venue.Halls.Add(hall);
+                    halls.Add(hall);
+                }
+                cinema.Venues.Add(venue);
+            }
+
+            await cinema.SaveChangesAsync(ct);
+
             var showcase = await catalog.Movies.OrderBy(m => m.Title).Take(5).ToListAsync(ct);
             var slot = DateTime.UtcNow.Date.AddDays(1).AddHours(15);
 
-            // Each film gets several performances across languages and days, so Movies on
-            // Display has real variety to group and filter rather than one row per film.
             var languages = new[]
             {
                 ("az", (string?)null), ("en", "az"), ("ru", "az"), ("tr", "en"), ("en", "ru")
             };
 
+            // Spread the films across cinemas and rooms so every hall has something to show.
             foreach (var (movie, index) in showcase.Select((m, i) => (m, i)))
             {
                 for (var slotIndex = 0; slotIndex < 3; slotIndex++)
                 {
+                    var hall = halls[(index * 3 + slotIndex) % halls.Count];
                     var (audio, subtitles) = languages[(index + slotIndex) % languages.Length];
+
                     cinema.Screenings.Add(new Screening
                     {
                         MovieId = movie.Id,
                         MovieTitle = movie.Title,
-                        Hall = slotIndex switch { 0 => "Hall A — Dolby", 1 => "Hall B", _ => "Rooftop" },
+                        HallId = hall.Id,
+                        Hall = hall.Name,
                         StartsAtUtc = slot.AddDays(slotIndex).AddHours(index * 2),
-                        Rows = 8, SeatsPerRow = 12,
+                        Rows = hall.Rows,
+                        SeatsPerRow = hall.SeatsPerRow,
                         SeatPrice = 8.50m + slotIndex,
                         AudioLanguage = audio,
                         SubtitleLanguage = subtitles

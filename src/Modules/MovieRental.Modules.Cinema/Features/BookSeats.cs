@@ -147,8 +147,9 @@ internal sealed class CheckoutHandler(
             Mask(contact.Email), payment.ExpiresAtUtc));
     }
 
-    /// <summary>Holds that were never confirmed are deleted outright rather than soft-deleted:
-    /// the unique index counts filtered rows, so a lingering row would block the seat forever.</summary>
+    /// <summary>Holds that were never confirmed are released. The removal is a soft delete —
+    /// the unique index is filtered to [IsDeleted] = 0, so the seat leaves the constraint and
+    /// can be sold again, while the abandoned attempt stays on record.</summary>
     private async Task ReleaseExpiredHoldsAsync(Guid screeningId, CancellationToken ct)
     {
         var stale = await db.SeatPayments

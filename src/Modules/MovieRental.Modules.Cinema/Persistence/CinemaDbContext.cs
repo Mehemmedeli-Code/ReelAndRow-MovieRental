@@ -12,6 +12,8 @@ public sealed class CinemaDbContext(DbContextOptions<CinemaDbContext> options) :
     public DbSet<Screening> Screenings => Set<Screening>();
     public DbSet<SeatBooking> SeatBookings => Set<SeatBooking>();
     public DbSet<SeatPayment> SeatPayments => Set<SeatPayment>();
+    public DbSet<Venue> Venues => Set<Venue>();
+    public DbSet<Hall> Halls => Set<Hall>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -27,6 +29,9 @@ public sealed class CinemaDbContext(DbContextOptions<CinemaDbContext> options) :
             e.HasIndex(x => x.StartsAtUtc);
             // What the Movies on Display filters sort and narrow by.
             e.HasIndex(x => new { x.StartsAtUtc, x.AudioLanguage });
+            e.HasIndex(x => x.HallId);
+            e.HasOne(x => x.HallRoom).WithMany()
+             .HasForeignKey(x => x.HallId).OnDelete(DeleteBehavior.NoAction);
             e.HasMany(x => x.Bookings).WithOne(x => x.Screening!).HasForeignKey(x => x.ScreeningId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -66,6 +71,28 @@ public sealed class CinemaDbContext(DbContextOptions<CinemaDbContext> options) :
             // relying on a cascade anyway.
             e.HasMany(x => x.Seats).WithOne(x => x.Payment!)
              .HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        b.Entity<Venue>(e =>
+        {
+            e.ToTable("Venues");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            e.Property(x => x.City).HasMaxLength(80).IsRequired();
+            e.Property(x => x.Address).HasMaxLength(250);
+            e.HasIndex(x => x.Name);
+            e.HasMany(x => x.Halls).WithOne(x => x.Venue!)
+             .HasForeignKey(x => x.VenueId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<Hall>(e =>
+        {
+            e.ToTable("Halls");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(60).IsRequired();
+            e.Property(x => x.Format).HasMaxLength(80);
+            // One "A100" per cinema; the same name in another cinema is a different room.
+            e.HasIndex(x => new { x.VenueId, x.Name }).IsUnique().HasFilter("[IsDeleted] = 0");
         });
 
         base.OnModelCreating(b);

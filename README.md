@@ -202,6 +202,57 @@ A film reaches a public gallery only when it is **Approved** *and* its author ha
 Craft. Video is served through an authorising endpoint, never as a static file, so a private
 film cannot be reached by guessing its URL.
 
+## Tests
+
+```bash
+dotnet test                                  # everything
+dotnet test --filter Category!=Integration   # unit tests only, no database needed
+```
+
+| File | What it pins down |
+|---|---|
+| `LateFeePolicyTests` | Grace period, part-days rounding up, the ten-day cap, and that a returned rental is judged by its return date rather than by now |
+| `CardValidationTests` | Luhn, both Mastercard ranges including the 2017 2-series, expiry edges, three-digit CVC |
+| `CodeHashingTests` | Codes are stored hashed, salted per code, and a hash from one salt never verifies against another |
+| `SlugFactoryTests` | Azerbaijani diacritics fold to ASCII, punctuation collapses, the year keeps remakes apart |
+| `ValidationBehaviorTests` | An invalid message never reaches its handler, and every failure is reported at once |
+| `SeatConcurrencyTests` | Two simultaneous checkouts for one seat: exactly one wins |
+
+`SeatConcurrencyTests` needs LocalDB and creates a throwaway database per run. It has to hit
+real SQL Server, because the guarantee under test *is* the filtered unique index — an
+in-memory provider would accept both rows and prove nothing. That is also why the assertion
+is on the database row count, not on what the handler returned.
+
+The rest run anywhere, in well under a second, because the logic they cover was written as
+pure functions with no clock and no database of their own.
+
+## Cinemas, halls and the 3D preview
+
+Four cinemas, four rooms each. `Venue` is the building; `Hall` is the room, and it carries the
+measurements — row pitch, rise, screen width and curvature, distance to the first row, room
+dimensions. A screening belongs to a hall and snapshots its seat grid, so re-fitting a room
+later never invalidates seats already sold.
+
+Pick one or more seats, press **View from here**, and the room is rebuilt in 3D with the
+camera at eye height in that seat. The readout gives the distance, the angle the screen
+subtends and the sideways offset, then a verdict: *too close · close · ideal · good · far*.
+
+The camera turns but never moves. Orbit controls would let someone drift out of the seat and
+end up answering a different question from the one they asked; dragging turns the head, with
+pitch clamped to roughly a neck's range. Picking several seats puts arrows in the header —
+and binds the arrow keys — so you can compare A2 against A3 without closing the view.
+
+The scene was designed in Claude Design and ported off that tool's `three-d-stage` runtime
+onto plain Three.js. Two things changed in the move:
+
+- Every dimension now comes from the hall record instead of being hardcoded. The sixteen
+  rooms are genuinely different, and a preview that drew the same box for all of them would
+  be decoration rather than information.
+- Three.js loads through a dynamic `import()`, so its ~190 KB gzipped arrives only when
+  somebody opens the preview. Vite splits it into its own chunk; every other page is
+  unaffected. The scene disposes its geometries, materials and textures on close — leaving
+  them behind would leak a whole room per viewing.
+
 ## Booking and payment
 
 Choosing seats and owning them are two different things, so booking is two steps.
@@ -213,8 +264,11 @@ Choosing seats and owning them are two different things, so booking is two steps
    people paying for the same seat, and an in-memory reservation would not be covered by it.
 2. **Confirm.** The code turns the hold into a ticket with a reference and a QR code.
 
-Holds last fifteen minutes. Expired ones are deleted — not soft-deleted, because the unique
-index counts filtered rows and a lingering row would block the seat forever.
+Holds last fifteen minutes, and a background sweeper releases the ones nobody confirmed.
+Releasing a seat is a soft delete: the unique index is filtered to `[IsDeleted] = 0`, so the
+row drops out of the constraint and the seat is sellable again while the abandoned attempt
+stays on record. An unfinished checkout is also recoverable — `/api/bookings/pending` returns
+it, so a reload or a different device still finds the way back to the code screen.
 
 **The card is never stored.** The number and CVC are validated and discarded inside the
 handler; only the brand, the last four digits and the cardholder name are persisted. There is
@@ -223,6 +277,49 @@ it does model correctly is the part students usually get wrong: never keeping th
 
 Signing in is required before checkout. Pressing Confirm while signed out sends the visitor
 to `/account?returnUrl=…` and back to the same performance afterwards.
+
+## Password reset
+
+Two steps, both anonymous, both answering identically whether or not the address exists —
+anything else turns the form into a way of discovering who has an account here.
+
+A reset code carries a `Purpose` distinct from an account-verification code. Without that
+column the two would be interchangeable, and a harmless "confirm your e-mail" message would
+double as a password-reset token.
+
+Completing a reset revokes every live refresh token. If the reset happened because somebody
+else had the old password, leaving their session alive would defeat the exercise.
+
+## Rate limiting
+
+A six-digit code is a million guesses. Five attempts burn the code, but nothing stopped an
+attacker asking for a fresh one, so the attempt counter alone was never a defence.
+
+Fixed windows, partitioned by client address:
+
+| Policy | Applies to | Limit |
+|---|---|---|
+| `auth` | login, register | 8 per minute |
+| `codes` | send/confirm code, forgot/reset password | 12 per five minutes |
+
+Rejections return 429 with a `Retry-After` header, because a user who mistyped twice deserves
+a straight answer rather than a silent wall. Behind a proxy the socket address is the proxy's,
+so `X-Forwarded-For` is preferred when present — configure `ForwardedHeaders` before trusting
+it in production.
+
+## Users and roles
+
+Admin → **Users**: search, grant or revoke Admin and Security, suspend and reinstate.
+
+Customer is never listed as grantable. Everyone keeps it — it is what grants renting and the
+Studio — and the server appends it regardless of what the client sends.
+
+Two things the server refuses, because the interface offers no way back from either: removing
+your own Admin role, and demoting or suspending the last active admin.
+
+Suspension, not deletion: the rentals, reviews and bookings behind an account still have to
+make sense afterwards. Suspending also revokes live refresh tokens, since blocking sign-in
+alone would leave an existing session working until it happened to expire.
 
 ## Verification and delivery
 
