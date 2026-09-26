@@ -40,7 +40,7 @@ public sealed record DecideShortFilmCommand(
     Guid Id, bool Approve, string? Note, ShortFilmOrigin? CorrectOriginTo) : ICommand<Result>;
 
 internal sealed class DecideShortFilmHandler(
-    MediaDbContext db, ICurrentUser currentUser, IUserDirectory users, IEmailSender email)
+    MediaDbContext db, ICurrentUser currentUser, IUserDirectory users, IEmailSender email, IAuditLog audit)
     : ICommandHandler<DecideShortFilmCommand, Result>
 {
     public async Task<Result> Handle(DecideShortFilmCommand command, CancellationToken ct)
@@ -70,6 +70,16 @@ internal sealed class DecideShortFilmHandler(
         film.ApprovedAtUtc = command.Approve ? DateTime.UtcNow : null;
 
         await db.SaveChangesAsync(ct);
+
+        // Overriding Security is exactly the act worth having on record.
+        await audit.RecordAsync(new AuditEntry(
+            command.Approve ? "shortfilm.approved" : "shortfilm.rejected",
+            film.Title,
+            film.SecurityReport.Verdict == SecurityVerdict.Flagged && command.Approve
+                ? $"Approved over a Security flag: {command.Note}"
+                : command.Note,
+            film.Id), ct);
+
         await NotifyAsync(film, command.Approve, ct);
         return Result.Success();
     }
