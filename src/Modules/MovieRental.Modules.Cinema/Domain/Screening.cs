@@ -48,6 +48,11 @@ public sealed class SeatBooking : BaseEntity, ISoftDeletable
 
     /// <summary>Null while the e-mailed code is still outstanding.</summary>
     public DateTime? ConfirmedAtUtc { get; set; }
+
+    /// <summary>Set when the seat is scanned at the door. A ticket that admits twice is not
+    /// a ticket, so this is what makes a second scan report "already used".</summary>
+    public DateTime? CheckedInAtUtc { get; set; }
+    public Guid? CheckedInByUserId { get; set; }
     public bool IsConfirmed => ConfirmedAtUtc is not null;
 
     public bool IsDeleted { get; set; }

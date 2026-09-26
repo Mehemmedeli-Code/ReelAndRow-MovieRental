@@ -9,6 +9,11 @@ public sealed class Venue : BaseEntity, ISoftDeletable
     public string City { get; set; } = "Baku";
     public string? Address { get; set; }
 
+    /// <summary>Where it is, so the map can put a pin on it. Editable by an admin — the seeded
+    /// values are approximations, not surveyed positions.</summary>
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+
     public List<Hall> Halls { get; set; } = [];
 
     public bool IsDeleted { get; set; }
