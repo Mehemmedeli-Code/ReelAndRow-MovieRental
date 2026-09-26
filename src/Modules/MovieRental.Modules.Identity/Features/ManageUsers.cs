@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using MovieRental.Modules.Identity.Persistence;
+using MovieRental.SharedKernel.Contracts;
 using MovieRental.SharedKernel.Cqrs;
 using MovieRental.SharedKernel.Results;
 using MovieRental.SharedKernel.Security;
@@ -45,7 +46,7 @@ internal sealed class GetUsersHandler(IdentityDbContext db)
 
 public sealed record SetUserRolesCommand(Guid UserId, string[] Roles) : ICommand<Result>;
 
-internal sealed class SetUserRolesHandler(IdentityDbContext db, ICurrentUser currentUser)
+internal sealed class SetUserRolesHandler(IdentityDbContext db, ICurrentUser currentUser, IAuditLog audit)
     : ICommandHandler<SetUserRolesCommand, Result>
 {
     private static readonly string[] Known = [AppRoles.Admin, AppRoles.Security, AppRoles.Customer];
@@ -81,15 +82,20 @@ internal sealed class SetUserRolesHandler(IdentityDbContext db, ICurrentUser cur
                 return Result.Failure(Error.Conflict("This is the last admin. Promote someone else first."));
         }
 
+        var before = user.Roles;
         user.Roles = string.Join(',', roles);
         await db.SaveChangesAsync(ct);
+
+        await audit.RecordAsync(new AuditEntry(
+            "user.roles", user.Email, $"{before} → {user.Roles}", user.Id), ct);
+
         return Result.Success();
     }
 }
 
 public sealed record SetUserSuspensionCommand(Guid UserId, bool Suspended, string? Reason) : ICommand<Result>;
 
-internal sealed class SetUserSuspensionHandler(IdentityDbContext db, ICurrentUser currentUser)
+internal sealed class SetUserSuspensionHandler(IdentityDbContext db, ICurrentUser currentUser, IAuditLog audit)
     : ICommandHandler<SetUserSuspensionCommand, Result>
 {
     public async Task<Result> Handle(SetUserSuspensionCommand command, CancellationToken ct)
@@ -129,6 +135,11 @@ internal sealed class SetUserSuspensionHandler(IdentityDbContext db, ICurrentUse
         }
 
         await db.SaveChangesAsync(ct);
+
+        await audit.RecordAsync(new AuditEntry(
+            command.Suspended ? "user.suspended" : "user.reinstated",
+            user.Email, command.Reason, user.Id), ct);
+
         return Result.Success();
     }
 }
@@ -168,4 +179,14 @@ public static class ManageUsersEndpoints
                     : TypedResults.Conflict(result.Error);
             }).WithName("SetUserSuspensionWithId");
     }
+}
+
+/// <summary>The log, read-only, for admins. There is no endpoint that edits or deletes an
+/// entry — a record the watched can rewrite is not a record.</summary>
+public static class AuditEndpoints
+{
+    public static void Map(IEndpointRouteBuilder app) =>
+        app.MapGet("/api/admin/audit", async (int? take, IAuditLog audit, CancellationToken ct) =>
+                Results.Ok(await audit.RecentAsync(take ?? 100, ct)))
+            .WithName("GetAuditLog").WithTags("Users").RequireAuthorization(AppRoles.Admin);
 }

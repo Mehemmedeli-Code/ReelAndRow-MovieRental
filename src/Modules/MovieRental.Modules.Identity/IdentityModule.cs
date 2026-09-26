@@ -28,6 +28,7 @@ public sealed class IdentityModule : IModule
         services.AddSingleton<ITokenService, TokenService>();
         services.AddScoped<IUserDirectory, UserDirectory>();
         services.AddScoped<IVerificationService, VerificationService>();
+        services.AddScoped<IAuditLog, AuditLog>();
 
         RegisterTransports(services, configuration);
     }
@@ -69,6 +70,8 @@ public sealed class IdentityModule : IModule
         VerificationEndpoints.Map(endpoints);
         ForgotPasswordEndpoints.Map(endpoints);
         ManageUsersEndpoints.Map(endpoints);
+        AuditEndpoints.Map(endpoints);
+        GlobeEndpoints.Map(endpoints);
         CurrentUserProfileEndpoint.Map(endpoints);
     }
 }

@@ -102,5 +102,6 @@ internal static class UserProfileMapper
 {
     public static UserProfileResponse ToProfile(this AppUser user) => new(
         user.Id, user.FullName, user.Email, user.PhoneNumber,
-        user.IsEmailConfirmed, user.IsPhoneConfirmed, user.RoleList);
+        user.IsEmailConfirmed, user.IsPhoneConfirmed, user.RoleList,
+        user.ShareOnGlobe, user.City, user.AvatarUrl);
 }

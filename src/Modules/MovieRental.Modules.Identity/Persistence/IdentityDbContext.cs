@@ -12,6 +12,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
     public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
+    public DbSet<AuditEntryRow> AuditEntries => Set<AuditEntryRow>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -49,6 +50,19 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
             e.Property(x => x.Channel).HasConversion<int>();
             e.Property(x => x.Purpose).HasConversion<int>();
             e.HasIndex(x => new { x.UserId, x.Purpose, x.Channel, x.SentAtUtc });
+        });
+
+        b.Entity<AuditEntryRow>(e =>
+        {
+            e.ToTable("AuditEntries");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Action).HasMaxLength(80).IsRequired();
+            e.Property(x => x.Subject).HasMaxLength(250).IsRequired();
+            e.Property(x => x.Reason).HasMaxLength(500);
+            e.Property(x => x.ActorName).HasMaxLength(150).IsRequired();
+            e.Property(x => x.ActorRoles).HasMaxLength(200).IsRequired();
+            e.HasIndex(x => x.AtUtc);
+            e.HasIndex(x => new { x.Action, x.AtUtc });
         });
 
         base.OnModelCreating(b);
