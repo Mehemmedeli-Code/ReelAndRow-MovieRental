@@ -281,9 +281,9 @@ export default function CinemaPage() {
                   screen
                 </div>
 
-                <div className="space-y-2 overflow-x-auto pb-2">
+                <div className="-mx-1 space-y-2 overflow-x-auto px-1 pb-2">
                   {Array.from({ length: map.rows }, (_, r) => r + 1).map((row) => (
-                    <div key={row} className="flex items-center gap-2">
+                    <div key={row} className="flex w-max items-center gap-2">
                       <span className="w-5 shrink-0 text-xs text-ink-mute">{String.fromCharCode(64 + row)}</span>
                       <div className="flex gap-1.5">
                         {map.seats
@@ -303,7 +303,7 @@ export default function CinemaPage() {
                                   seat.isTaken ? ", taken" : selected ? ", selected" : ", free"
                                 }`}
                                 aria-pressed={selected}
-                                className={`h-7 w-7 rounded-t-md border text-[10px] transition-colors ${
+                                className={`h-8 w-8 shrink-0 rounded-t-md border text-[11px] transition-colors sm:h-7 sm:w-7 sm:text-[10px] ${
                                   seat.isHeld
                                     ? "cursor-not-allowed border-warn/50 bg-warn-bg text-warn/70"
                                     : seat.isTaken
@@ -356,7 +356,7 @@ export default function CinemaPage() {
                       }}
                     />
                   ) : (
-                    <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                       <p className="text-sm text-ink-mute">
                         {picked.size === 0
                           ? t("cinema.noSeats")

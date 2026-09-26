@@ -10,6 +10,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { t, languageName } from "@/lib/i18n";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { UserAdmin } from "@/components/UserAdmin";
+import { AuditTrail } from "@/components/AuditTrail";
 import { statusTone, type ShortFilmDetail } from "@/lib/shorts";
 import type { MovieListItem } from "@/components/MovieCard";
 
@@ -161,8 +162,8 @@ export default function AdminPage() {
         }
       >
         <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-          <div className="overflow-x-auto rounded-xl border border-line">
-            <table className="w-full text-left text-sm">
+          <div className="-mx-1 overflow-x-auto rounded-xl border border-line">
+            <table className="w-full min-w-[34rem] text-left text-sm">
               <thead className="bg-surface-raised text-xs text-ink-mute">
                 <tr>
                   <th className="px-4 py-3 font-medium">{t("admin.col.title")}</th>
@@ -264,13 +265,17 @@ export default function AdminPage() {
         <UserAdmin />
       </Section>
 
+      <Section title={t("admin.audit")} lede={t("admin.auditLede")}>
+        <AuditTrail />
+      </Section>
+
       <Section
         title={t("admin.screenings")}
         lede={t("admin.screeningsLede")}
       >
         <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-          <div className="overflow-x-auto rounded-xl border border-line">
-            <table className="w-full text-left text-sm">
+          <div className="-mx-1 overflow-x-auto rounded-xl border border-line">
+            <table className="w-full min-w-[34rem] text-left text-sm">
               <thead className="bg-surface-raised text-xs text-ink-mute">
                 <tr>
                   <th className="px-4 py-3 font-medium">{t("admin.film")}</th>

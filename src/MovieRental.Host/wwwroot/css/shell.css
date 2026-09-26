@@ -188,9 +188,29 @@ html.rr { background: var(--surface); }
   outline-offset: 3px;
 }
 
-@media (max-width: 720px) {
-  .rr-header { gap: 1rem; }
-  .rr-nav { gap: 0.9rem; order: 3; width: 100%; }
-  .rr-tools { gap: 0.6rem; }
+@media (max-width: 900px) {
+  .rr-header { gap: 0.75rem; padding-inline: 1rem; }
+
+  /* Ten nav items will not wrap into anything readable on a phone, so the row scrolls
+     sideways instead of stacking into a wall of links. */
+  .rr-nav {
+    order: 3;
+    width: 100%;
+    gap: 1rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.25rem;
+  }
+  .rr-nav::-webkit-scrollbar { display: none; }
+  .rr-nav a { white-space: nowrap; }
+
+  .rr-tools { gap: 0.5rem; }
   .rr-lang a { padding: 0.24rem 0.38rem; font-size: 0.68rem; }
+  .rr-account { padding: 0.45rem 0.8rem; font-size: 0.8rem; }
+  .rr-wordmark span { display: none; }   /* the eye is enough at this width */
+}
+
+@media (max-width: 520px) {
+  main { padding-inline: 0.9rem; }
 }

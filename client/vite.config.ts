@@ -33,7 +33,13 @@ export default defineConfig({
       output: {
         entryFileNames: "app.js",
         chunkFileNames: "[name].js",
-        assetFileNames: "app.[ext]",
+        // The entry stylesheet keeps its fixed name so _Layout.cshtml can hard-code it.
+        // A lazily loaded chunk brings its own CSS — MapLibre's, for instance — and Vite
+        // injects that link when the chunk loads, so it must not collide with app.css.
+        assetFileNames: (asset) =>
+          asset.names?.[0] === "main.css" || asset.names?.[0] === "app.css"
+            ? "app.css"
+            : "[name].[ext]",
       },
     },
   },

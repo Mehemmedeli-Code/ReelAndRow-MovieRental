@@ -25,12 +25,19 @@ internal sealed class AddReviewValidator : AbstractValidator<AddReviewCommand>
     }
 }
 
-internal sealed class AddReviewHandler(CatalogDbContext db, ICurrentUser currentUser, IUserDirectory users)
+internal sealed class AddReviewHandler(CatalogDbContext db, ICurrentUser currentUser, IUserDirectory users, IRentalApi rentals)
     : ICommandHandler<AddReviewCommand, Result<ReviewResponse>>
 {
     public async Task<Result<ReviewResponse>> Handle(AddReviewCommand command, CancellationToken ct)
     {
         var userId = currentUser.RequireId();
+
+        // A rating from somebody who never watched the film is noise, and it moves the same
+        // average as a real one. Past rentals count: returning it is not a reason to lose
+        // your say.
+        if (!await rentals.HasRentedAsync(userId, command.MovieId, ct))
+            return Result.Failure<ReviewResponse>(
+                Error.Forbidden("Rent this film before reviewing it."));
         var movie = await db.Movies.Include(m => m.Reviews).FirstOrDefaultAsync(m => m.Id == command.MovieId, ct);
         if (movie is null) return Result.Failure<ReviewResponse>(Error.NotFound("Movie"));
 

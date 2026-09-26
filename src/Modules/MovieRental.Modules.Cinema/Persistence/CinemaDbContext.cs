@@ -80,6 +80,8 @@ public sealed class CinemaDbContext(DbContextOptions<CinemaDbContext> options) :
             e.Property(x => x.Name).HasMaxLength(120).IsRequired();
             e.Property(x => x.City).HasMaxLength(80).IsRequired();
             e.Property(x => x.Address).HasMaxLength(250);
+            e.Property(x => x.Latitude).HasPrecision(9, 6);
+            e.Property(x => x.Longitude).HasPrecision(9, 6);
             e.HasIndex(x => x.Name);
             e.HasMany(x => x.Halls).WithOne(x => x.Venue!)
              .HasForeignKey(x => x.VenueId).OnDelete(DeleteBehavior.Cascade);

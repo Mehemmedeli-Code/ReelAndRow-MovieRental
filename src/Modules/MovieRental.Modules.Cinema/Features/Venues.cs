@@ -18,7 +18,9 @@ public sealed record HallGeometry(
     double ScreenWidth, double ScreenHeight, double ScreenCurveRadius,
     double FirstRowDistance);
 
-public sealed record VenueItem(Guid Id, string Name, string City, string? Address, IReadOnlyList<HallGeometry> Halls);
+public sealed record VenueItem(
+    Guid Id, string Name, string City, string? Address,
+    double Latitude, double Longitude, IReadOnlyList<HallGeometry> Halls);
 
 public sealed record GetVenuesQuery : IQuery<IReadOnlyList<VenueItem>>;
 
@@ -32,7 +34,7 @@ internal sealed class GetVenuesHandler(CinemaDbContext db) : IQueryHandler<GetVe
             .ToListAsync(ct);
 
         return [.. venues.Select(v => new VenueItem(v.Id, v.Name, v.City, v.Address,
-            [.. v.Halls.OrderBy(h => h.Name).Select(Map)]))];
+            v.Latitude, v.Longitude, [.. v.Halls.OrderBy(h => h.Name).Select(Map)]))];
     }
 
     internal static HallGeometry Map(Domain.Hall h) => new(

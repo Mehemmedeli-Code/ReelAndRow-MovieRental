@@ -14,6 +14,20 @@ public sealed class AppUser : BaseEntity, ISoftDeletable
 
     /// <summary>Suspension rather than deletion: the rentals, reviews and bookings behind an
     /// account still have to make sense after the person is barred.</summary>
+    /// <summary>
+    /// Globe presence. Off unless the person turns it on, and city-level only.
+    ///
+    /// Publishing where somebody lives is not a detail to get wrong. Nobody is put on the map
+    /// by registering: appearing there is a choice, it is reversible, and the coordinates are
+    /// the city's, never the person's — the browser is never asked for a precise position.
+    /// </summary>
+    public bool ShareOnGlobe { get; set; }
+    public string? City { get; set; }
+    public string? CountryCode { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public string? AvatarUrl { get; set; }
+
     public bool IsSuspended { get; set; }
     public DateTime? SuspendedAtUtc { get; set; }
     public string? SuspensionReason { get; set; }

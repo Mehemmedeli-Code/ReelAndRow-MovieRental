@@ -58,7 +58,7 @@ public sealed record SubmitSecurityReportCommand(
     Guid Id, bool WatchedInFull, string? Summary, IReadOnlyList<SecurityCheckDto> Checks) : ICommand<Result>;
 
 internal sealed class SubmitSecurityReportHandler(
-    MediaDbContext db, ICurrentUser currentUser, IUserDirectory users)
+    MediaDbContext db, ICurrentUser currentUser, IUserDirectory users, IAuditLog audit)
     : ICommandHandler<SubmitSecurityReportCommand, Result>
 {
     private static readonly SecurityCheck[] Required = Enum.GetValues<SecurityCheck>();
@@ -108,6 +108,15 @@ internal sealed class SubmitSecurityReportHandler(
         film.Status = failed ? SubmissionStatus.SecurityFlagged : SubmissionStatus.SecurityCleared;
 
         await db.SaveChangesAsync(ct);
+
+        await audit.RecordAsync(new AuditEntry(
+            failed ? "security.flagged" : "security.cleared",
+            film.Title,
+            failed
+                ? string.Join("; ", command.Checks.Where(c => c.Outcome == CheckOutcome.Fail).Select(c => c.Check))
+                : command.Summary,
+            film.Id), ct);
+
         return Result.Success();
     }
 }

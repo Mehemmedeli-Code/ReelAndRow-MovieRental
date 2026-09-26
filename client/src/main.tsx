@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@/styles/app.css";
 
 import { restoreSession } from "@/lib/api";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ShaderBackground } from "@/components/ui/shader-background";
 import HomePage from "@/pages/HomePage";
 import CinemaPage from "@/pages/CinemaPage";
@@ -14,6 +15,8 @@ import OnDisplayPage from "@/pages/OnDisplayPage";
 import AiCatalogPage from "@/pages/GalleryPage";
 import HumanCraftPage from "@/pages/HumanCraftPage";
 import SecurityPage from "@/pages/SecurityPage";
+import GlobePage from "@/pages/GlobePage";
+import SupportPage from "@/pages/SupportPage";
 
 /**
  * Island mounting. Razor owns routing and the page shell; each page declares which React
@@ -31,6 +34,8 @@ const ISLANDS: Record<string, () => JSX.Element> = {
   aiCatalog: AiCatalogPage,
   humanCraft: HumanCraftPage,
   security: SecurityPage,
+  globe: GlobePage,
+  support: SupportPage,
 };
 
 async function bootstrap() {
@@ -57,7 +62,9 @@ async function bootstrap() {
 
   createRoot(container).render(
     <StrictMode>
-      <Island />
+      <ErrorBoundary label={name}>
+        <Island />
+      </ErrorBoundary>
     </StrictMode>,
   );
 }

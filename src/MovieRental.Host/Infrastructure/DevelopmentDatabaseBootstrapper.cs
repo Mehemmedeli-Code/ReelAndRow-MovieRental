@@ -29,12 +29,23 @@ public static class DevelopmentDatabaseBootstrapper
     /// a schema that is present but out of date — which fails later, at query time, with a
     /// far less obvious error. Production uses real migrations and never reads this.
     /// </summary>
-    private const string SchemaStamp = "2026-09-14-venues-and-halls";
+    private const string SchemaStamp = "2026-09-14-globe-presence";
 
     public static async Task InitialiseAsync(IServiceProvider services, CancellationToken ct = default)
     {
         await using var scope = services.CreateAsyncScope();
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbBootstrap");
+        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+
+        // Once real migrations exist, this whole file steps aside. Migrate instead of dropping:
+        // a new column is added to the database you already have, rather than costing you every
+        // account and booking in it. Flip Database:UseMigrations after running scripts\migrations.ps1.
+        if (configuration.GetValue("Database:UseMigrations", false))
+        {
+            await MigrateAsync(scope.ServiceProvider, logger, ct);
+            await SeedAsync(scope.ServiceProvider, ct);
+            return;
+        }
 
         await DropIfStaleAsync(scope.ServiceProvider, logger, ct);
 
@@ -61,6 +72,30 @@ public static class DevelopmentDatabaseBootstrapper
 
         await SeedAsync(scope.ServiceProvider, ct);
         await WriteStampAsync(scope.ServiceProvider, ct);
+    }
+
+    /// <summary>Applies each module's pending migrations. Contexts are migrated one at a time
+    /// because each owns its own schema and its own __EFMigrations table — there is no single
+    /// history for the solution, and that is the point of the modular split.</summary>
+    private static async Task MigrateAsync(IServiceProvider services, ILogger logger, CancellationToken ct)
+    {
+        DbContext[] contexts =
+        [
+            services.GetRequiredService<IdentityDbContext>(),
+            services.GetRequiredService<CatalogDbContext>(),
+            services.GetRequiredService<RentalsDbContext>(),
+            services.GetRequiredService<CinemaDbContext>(),
+            services.GetRequiredService<MediaDbContext>(),
+        ];
+
+        foreach (var context in contexts)
+        {
+            var pending = (await context.Database.GetPendingMigrationsAsync(ct)).ToArray();
+            if (pending.Length == 0) continue;
+
+            logger.LogInformation("Applying {Count} migration(s) to {Context}.", pending.Length, context.GetType().Name);
+            await context.Database.MigrateAsync(ct);
+        }
     }
 
     /// <summary>Compares the stored stamp with the current one and wipes the database when
@@ -193,10 +228,10 @@ public static class DevelopmentDatabaseBootstrapper
             // showed the same box everywhere would be decoration rather than information.
             var venues = new[]
             {
-                ("Nizami", "Baku", "28 May küç. 1"),
-                ("28 Mall", "Baku", "Azadlıq pr. 15"),
-                ("Ganjlik Mall", "Baku", "Fatali Khan Khoyski 14"),
-                ("Metropark", "Baku", "Babek pr. 96"),
+                ("Nizami", "Baku", "28 May küç. 1", 40.3725, 49.8375),
+                ("28 Mall", "Baku", "Azadlıq pr. 15", 40.3789, 49.8480),
+                ("Ganjlik Mall", "Baku", "Fatali Khan Khoyski 14", 40.4004, 49.8506),
+                ("Metropark", "Baku", "Babek pr. 96", 40.4044, 49.8949),
             };
 
             var layouts = new (string Name, string Format, int Rows, int Cols, double Width,
@@ -211,9 +246,13 @@ public static class DevelopmentDatabaseBootstrapper
 
             var halls = new List<Hall>();
 
-            foreach (var (name, city, address) in venues)
+            foreach (var (name, city, address, lat, lng) in venues)
             {
-                var venue = new Venue { Name = name, City = city, Address = address };
+                var venue = new Venue
+                {
+                    Name = name, City = city, Address = address,
+                    Latitude = lat, Longitude = lng
+                };
                 foreach (var layout in layouts)
                 {
                     var hall = new Hall

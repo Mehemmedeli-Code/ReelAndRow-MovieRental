@@ -23,6 +23,7 @@ public sealed class RentalsModule : IModule
 
         services.AddSingleton(configuration.GetSection("Rentals:LateFee").Get<LateFeePolicy>() ?? new LateFeePolicy());
         services.AddScoped<IRentalAnalytics, RentalAnalytics>();
+        services.AddScoped<IRentalApi, RentalApi>();
         services.AddHostedService<DueDateNotificationService>();
     }
 

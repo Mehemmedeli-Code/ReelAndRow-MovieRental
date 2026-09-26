@@ -4,9 +4,11 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MovieRental.Host.Infrastructure;
+using MovieRental.Host.Infrastructure.Assistant;
 using MovieRental.Host.Infrastructure.Localization;
 using MovieRental.Host.Middleware;
 using MovieRental.Host.Pages;
@@ -40,6 +42,26 @@ builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavi
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+
+builder.Services.Configure<AssistantOptions>(builder.Configuration.GetSection(AssistantOptions.SectionName));
+builder.Services.AddSingleton<BuiltinAssistant>();
+
+// The written answers are always registered. A model, when one is configured, wraps them and
+// falls back to them on any failure — so the support box answers even when the API does not.
+if (string.Equals(builder.Configuration[$"{AssistantOptions.SectionName}:Provider"], "Anthropic",
+        StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient(nameof(AnthropicAssistant));
+    builder.Services.AddSingleton<IAssistant>(sp => new AnthropicAssistant(
+        sp.GetRequiredService<IHttpClientFactory>(),
+        sp.GetRequiredService<IOptions<AssistantOptions>>(),
+        sp.GetRequiredService<BuiltinAssistant>(),
+        sp.GetRequiredService<ILogger<AnthropicAssistant>>()));
+}
+else
+{
+    builder.Services.AddSingleton<IAssistant>(sp => sp.GetRequiredService<BuiltinAssistant>());
+}
 
 builder.Services.AddSingleton<Translations>();
 builder.Services.AddScoped<ILanguageContext, LanguageContext>();
@@ -212,6 +234,7 @@ app.MapRazorPages();
 app.MapModules();
 AnalyticsEndpoints.Map(app);
 LanguageEndpoints.Map(app);
+AssistantEndpoints.Map(app);
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", utc = DateTime.UtcNow }))
    .WithTags("System").AllowAnonymous();

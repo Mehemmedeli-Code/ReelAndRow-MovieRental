@@ -30,6 +30,7 @@ public sealed class CatalogModule : IModule
         GetMovieByIdEndpoint.Map(endpoints);
         ManageMoviesEndpoints.Map(endpoints);
         AddReviewEndpoint.Map(endpoints);
+        CompareTasteEndpoint.Map(endpoints);
         SeedMoviesEndpoint.Map(endpoints);
     }
 }

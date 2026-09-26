@@ -202,6 +202,58 @@ A film reaches a public gallery only when it is **Approved** *and* its author ha
 Craft. Video is served through an authorising endpoint, never as a static file, so a private
 film cannot be reached by guessing its URL.
 
+## Migrations
+
+The development bootstrapper drops and rebuilds the database whenever the model changes. That
+is fine until you care about the data in it — and on this project that point arrived quickly.
+
+```powershell
+.\scripts\migrations.ps1 -Add Init      # every module
+.\scripts\migrations.ps1 -Update
+```
+
+Then set `Database:UseMigrations` to `true` in `appsettings.Development.json`. The bootstrapper
+steps aside and migrates instead of dropping: a new column is added to the database you
+already have, rather than costing you every account and booking in it.
+
+After that, a model change is one module's problem:
+
+```powershell
+.\scripts\migrations.ps1 -Add AddSomething -Only Catalog
+.\scripts\migrations.ps1 -Update -Only Catalog
+```
+
+Each module has its own `__EFMigrations` table in its own schema. There is no single history
+for the solution, which is the point of the split.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push: restore, build, and the unit tests on the .NET
+side; `npm ci`, type-check and build on the client. Integration tests are filtered out because
+they need SQL Server; the unit tests deliberately need nothing, which is what makes them worth
+running every time.
+
+The client has no test runner yet, so `tsc --noEmit` is the gate. It catches the class of bug
+that actually happens here: a contract changing on the server while the client still reads the
+old shape.
+
+## Smoke test
+
+```bash
+cd client && npm run smoke          # every page
+npm run smoke -- globe              # one page
+```
+
+Mounts every React island in a fake DOM and fails if one throws or renders nothing.
+
+It exists because of a real failure: a component that could not start WebGL took its whole
+page down, leaving a blank screen and no message. `tsc` and `vite build` both passed — nothing
+catches a crash that happens only when the code runs. jsdom has no WebGL, which makes it a
+good stand-in for the machines where that actually happens.
+
+Every island is now wrapped in an error boundary, so a widget that fails shows a contained
+message and the rest of the page keeps working.
+
 ## Tests
 
 ```bash
@@ -225,6 +277,83 @@ is on the database row count, not on what the handler returned.
 
 The rest run anywhere, in well under a second, because the logic they cover was written as
 pure functions with no clock and no database of their own.
+
+## WatchingYou AI
+
+**AI Support** in the nav opens a chat box that answers questions about the site.
+
+It runs in one of two modes, chosen by `Assistant:Provider`:
+
+- **`Builtin`** (the default) answers from a written FAQ — twelve topics, in all four
+  languages, matched by keyword. It is not a language model and the interface does not pretend
+  it is: an unmatched question gets "I do not know that one" rather than an invented answer.
+  It needs no credentials, which is why it is the default. A support box that is broken until
+  somebody pastes an API key is worse than one that answers the twelve questions people
+  actually ask.
+- **`Anthropic`** forwards the conversation to a model with a system prompt describing the
+  site. Any failure — bad key, timeout, empty reply — falls back to the written answers, so
+  the box always responds.
+
+```powershell
+dotnet user-secrets set "Assistant:Provider" "Anthropic" --project src\MovieRental.Host
+dotnet user-secrets set "Assistant:ApiKey" "sk-ant-…" --project src\MovieRental.Host
+```
+
+The key goes in user secrets, never `appsettings.json`. Calls are made server-side: a key in
+the browser is a key anyone can read and spend.
+
+**Stateless.** The client sends the conversation with each question and the server stores
+nothing — no table, no retention question, and no transcript of what people asked support
+sitting in a database nobody remembers is there. The history is trimmed to twenty turns and
+each message to 2,000 characters, because one enormous message is the cheapest way to run up a
+bill on somebody else's key. The endpoint shares the rate limiter used by the code endpoints.
+
+## The globe
+
+Signed-in members can put themselves on a globe and find people whose taste matches theirs.
+
+**Appearing is a choice.** `ShareOnGlobe` is off until somebody turns it on, and turning it off
+does not merely hide the row — it clears the stored city, because a record that still holds
+where somebody lives is still holding it. The browser is never asked for a position: the city
+is typed, and coordinates come from a small gazetteer, so a pin is the city's point and
+identical for everyone in it. A map that could point at somebody's street is a different and
+much worse product.
+
+**A pin is a city, not a person.** The original component drew one marker per entry, which is
+fine for thirteen capitals and fatal for a real membership — a million markers is a million
+draw calls and a frozen tab. Cities are aggregated in SQL: three faces and a count, so a city
+of a million costs exactly what a city of three costs, and the payload grows with the number
+of cities rather than the number of people. The member list under a pin is paged, fifty at a
+time.
+
+**Compare movie categories you watched** puts the two genre histograms on one scale and gives a
+match percentage. It is a Jaccard overlap over genres, not titles: two people who have watched
+no film in common can still both live on westerns and documentaries, and that is the useful
+thing to know before starting a conversation. Catalog computes it because Catalog owns genres;
+Rentals supplies the film ids and never learns what a genre is.
+
+The Earth texture is generated into `wwwroot/globe/` rather than pulled from a CDN — a map that
+silently turns into a grey ball when somebody else's CDN moves is worse than no map. It is a
+coarse land/ocean map, which is all a texture at this scale can show.
+
+**Not built: messaging.** Finding someone is not talking to them. A chat worth shipping needs
+delivery, moderation, blocking and abuse reporting, and bolting a message box onto this without
+those would be worse than leaving it out.
+
+## The map
+
+Movies on Display opens with the four cinemas pinned on a dark MapLibre basemap. Clicking a
+pin filters the listing below to that building; clicking it again clears the filter. A map you
+cannot act on is a picture, so the pin is the filter control.
+
+Adapted from the mapcn marker component, with the light/dark switching removed — this site has
+one theme, and the original carried a MutationObserver and a media-query listener to follow a
+class that never changes. The Carto basemap needs no API key, which is why it is preferred over
+Mapbox here. MapLibre loads through `React.lazy`, so its ~280 KB gzipped stays out of every
+page that has no map, exactly as Three.js does.
+
+Coordinates live on the venue and are editable. The seeded values put each pin in the right
+neighbourhood; they are approximations, not surveyed positions.
 
 ## Cinemas, halls and the 3D preview
 
@@ -306,6 +435,37 @@ Rejections return 429 with a `Retry-After` header, because a user who mistyped t
 a straight answer rather than a silent wall. Behind a proxy the socket address is the proxy's,
 so `X-Forwarded-For` is preferred when present — configure `ForwardedHeaders` before trusting
 it in production.
+
+## The door
+
+QR codes were only half a feature while nothing read them back. Security → **Ticket check-in**
+takes a scanned payload or a reference typed by hand and answers with one of five states:
+
+*Admitted · Already used · Different screening · Never confirmed · Not found*
+
+The refusals matter more than the acceptance — a doorman needs to know **why** a ticket is
+being turned away. Checking in stamps the seat, so a second scan of the same code reports when
+it was first used. Scanning one seat's code admits that seat; a typed reference admits the next
+unused seat on the booking, which is what happens when a group arrives together.
+
+## Audit log
+
+Separation of duties without a record is only half the idea: if nobody can see who approved a
+flagged film or who suspended an account, the split protects nothing.
+
+`identity.AuditEntries` records role changes, suspensions, security verdicts, admin decisions
+and check-ins — with the reason, and with the actor's name and roles **as they were at the
+time**. Looking up today's roles later would quietly rewrite history every time somebody is
+promoted.
+
+Append-only. There is no endpoint that edits or deletes an entry, because a log the watched can
+rewrite is not evidence.
+
+## Reviews
+
+Rating a film requires having rented it. `IRentalApi.HasRentedAsync` is a contract in
+SharedKernel: Catalog asks the question, Rentals answers it, and neither reaches into the
+other's tables. Past rentals count — having returned the film is not a reason to lose your say.
 
 ## Users and roles
 

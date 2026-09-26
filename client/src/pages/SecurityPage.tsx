@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { Section, Panel, Notice, Empty, Spinner } from "@/components/Shell";
+import { TicketCheckIn } from "@/components/TicketCheckIn";
 import { Button } from "@/components/ui/button";
 import { Textarea, Field } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +85,11 @@ export default function SecurityPage() {
   }
 
   return (
+    <>
+      <Section title={t("checkin.title")} lede={t("checkin.lede")}>
+        <TicketCheckIn />
+      </Section>
+
     <Section title={t("security.title")} lede={t("security.lede")}>
       {queue === null ? <Spinner label={t("common.loading")} /> : null}
       {message ? <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div> : null}
@@ -173,6 +179,7 @@ export default function SecurityPage() {
         ))}
       </div>
     </Section>
+    </>
   );
 }
 

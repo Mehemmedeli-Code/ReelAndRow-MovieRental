@@ -384,14 +384,14 @@ export function HallPreview({
       aria-modal="true"
       aria-label={t("view.title")}
     >
-      <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
         <div>
           <p className="font-display text-lg text-ink">{t("view.title")}</p>
           <p className="text-xs text-ink-mute">
             {hall ? `${hall.name}${hall.format ? ` · ${hall.format}` : ""}` : t("common.loading")}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {seats.length > 1 ? (
             <div className="flex items-center gap-1.5">
               <Button

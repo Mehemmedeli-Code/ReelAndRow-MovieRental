@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { get, query } from "@/lib/api";
+import { CinemaMap, VenueFilterHint, type MappedVenue } from "@/components/CinemaMap";
 import { t, formatWhen, formatDay, languageName } from "@/lib/i18n";
 import { formatMoney } from "@/lib/format";
 
@@ -12,6 +13,8 @@ interface Showtime {
   screeningId: string;
   startsAtUtc: string;
   hall: string;
+  venueId: string;
+  venueName: string;
   audioLanguage: string;
   subtitleLanguage?: string | null;
   seatPrice: number;
@@ -32,15 +35,21 @@ export default function OnDisplayPage() {
   const [language, setLanguage] = useState("");
   const [search, setSearch] = useState("");
   const [days, setDays] = useState(14);
+  const [venues, setVenues] = useState<MappedVenue[]>([]);
+  const [venueId, setVenueId] = useState<string | null>(null);
+
+  useEffect(() => {
+    get<MappedVenue[]>("/api/venues").then(setVenues).catch(() => setVenues([]));
+  }, []);
 
   const load = useCallback(async () => {
     setItems(null);
     const to = new Date(Date.now() + days * 86_400_000).toISOString();
     const data = await get<OnDisplayItem[]>(
-      "/api/on-display" + query({ language, search, to }),
+      "/api/on-display" + query({ language, search, to, venueId }),
     ).catch(() => []);
     setItems(data);
-  }, [language, search, days]);
+  }, [language, search, days, venueId]);
 
   // Debounced so typing a film name does not fire a request per keystroke.
   useEffect(() => {
@@ -50,6 +59,9 @@ export default function OnDisplayPage() {
 
   return (
     <Section title={t("onDisplay.title")} lede={t("onDisplay.lede")}>
+      <CinemaMap venues={venues} selectedId={venueId} onSelect={setVenueId} />
+      <VenueFilterHint venue={venues.find((v) => v.id === venueId)} />
+
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <Input
           value={search}
@@ -92,7 +104,7 @@ export default function OnDisplayPage() {
                     <Clock size={13} aria-hidden />
                     {formatDay(show.startsAtUtc)} · {formatWhen(show.startsAtUtc, { hour: "2-digit", minute: "2-digit" })}
                   </p>
-                  <p className="mt-1 text-xs text-ink-mute">{show.hall}</p>
+                  <p className="mt-1 text-xs text-ink-mute">{show.venueName} · {show.hall}</p>
 
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <Badge tone="warn">{languageName(show.audioLanguage)}</Badge>
